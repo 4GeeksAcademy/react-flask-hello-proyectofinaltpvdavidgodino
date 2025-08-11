@@ -2,14 +2,13 @@
 This module takes care of starting the API Server, Loading the DB and Adding the endpoints
 """
 import os
-from flask import Flask, request, jsonify, url_for, send_from_directory
+from flask import Flask, jsonify, send_from_directory
 from flask_migrate import Migrate
 from flask_swagger import swagger
-from flask_jwt_extended import JWTManager  # 🔹 Import JWT
+from flask_jwt_extended import JWTManager
 from api.utils import APIException, generate_sitemap
 from api.models import db
-from api.routes import api
-from api.routes.auth_routes import auth_bp  # 🔹 Import blueprint de Auth
+from api.routes import api  
 from api.admin import setup_admin
 from api.commands import setup_commands
 
@@ -41,9 +40,8 @@ db.init_app(app)
 setup_admin(app)
 setup_commands(app)
 
-# 🔹 Registrar blueprints
-app.register_blueprint(api, url_prefix='/api')        # Rutas generales
-app.register_blueprint(auth_bp, url_prefix='/api/auth')  # Rutas de autenticación
+# 🔹 Registrar blueprint principal
+app.register_blueprint(api, url_prefix='/api')
 
 # Manejo de errores como JSON
 @app.errorhandler(APIException)
