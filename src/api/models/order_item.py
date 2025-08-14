@@ -1,15 +1,19 @@
 from sqlalchemy import ForeignKey, Numeric, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from . import db
+from src.database import db
+
 
 class OrderItem(db.Model):
     __tablename__ = "order_items"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id"), nullable=False)
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id"), nullable=False)
     cantidad: Mapped[int] = mapped_column(Integer, nullable=False)
-    precio_unitario: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    precio_unitario: Mapped[float] = mapped_column(
+        Numeric(10, 2), nullable=False)
     notas: Mapped[str] = mapped_column(String(255), nullable=True)
 
     # Relaciones

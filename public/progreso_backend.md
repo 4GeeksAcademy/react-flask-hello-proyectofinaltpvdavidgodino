@@ -127,3 +127,51 @@ PRODUCTO_CRUD → solo ADMIN
 ORDEN_VER → ADMIN, CAMARERO
 etc.
 Integrar decorador en rutas sensibles
+
+
+Estado actual del backend 12/08
+Estructura relevante del proyecto:
+src/
+  api/
+    app.py            # Configuración principal de Flask
+    routes.py         # Blueprint principal de la API
+    auth_routes.py    # Rutas de autenticación
+    models/           # Modelos SQLAlchemy
+    utils.py
+✅ Funcionalidades ya implementadas
+JWT configurado en app.py con JWT_SECRET_KEY.
+Blueprints registrados:
+/api → principal (routes.py)
+/api/auth → autenticación (auth_routes.py)
+Endpoints en auth_routes:
+GET /api/auth/check → prueba de carga de rutas
+POST /api/auth/create-admin → crea un usuario admin (solo para desarrollo)
+POST /api/auth/login → login y genera token JWT con rol
+POST /api/auth/register → crea usuarios (solo si el que llama es ADMIN)
+Modelo User y UserRole creados en models/user.py.
+⚠ Problema pendiente
+El endpoint /api/auth/create-admin no aparece en el sitemap y devuelve 404 en Postman.
+Esto indica que:
+O bien auth_routes.py no se está registrando correctamente en routes.py.
+O routes.py no está importando auth_bp como debería.
+O el servidor que estás usando no es el que tiene las últimas modificaciones (posible desincronización con Codespaces).
+El resto de rutas (/hello, /auth/check) sí funcionan.
+📅 Objetivo para mañana
+Verificar registro del blueprint auth_bp:
+Confirmar que auth_routes.py está en el mismo nivel que routes.py en src/api/.
+Confirmar que routes.py tiene:
+from api.auth_routes import auth_bp
+api.register_blueprint(auth_bp, url_prefix="/auth")
+Que en app.py se importa api:
+from api.routes import api
+app.register_blueprint(api, url_prefix='/api')
+Reiniciar servidor en Codespaces y asegurar que el puerto 5000 está abierto en public.
+Probar en navegador que /api/auth/create-admin devuelve 405 Method Not Allowed si entras por GET (significa que existe), y luego probar POST desde Postman con body JSON:
+{
+  "email": "admin@test.com",
+  "password": "Admin123",
+  "nombre": "Administrador"
+}
+Si sigue en 404 → listar endpoints con:
+print(app.url_map)
+en app.py después de registrar los blueprints.

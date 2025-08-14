@@ -1,6 +1,6 @@
 from sqlalchemy import String, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
-from . import db
+from src.database import db
 
 class Table(db.Model):
     __tablename__ = "tables"
