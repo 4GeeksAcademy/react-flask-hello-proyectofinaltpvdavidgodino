@@ -1,4 +1,7 @@
 from flask import jsonify, url_for
+from functools import wraps
+from flask_jwt_extended import verify_jwt_in_request, get_jwt
+
 
 class APIException(Exception):
     status_code = 400
@@ -15,22 +18,23 @@ class APIException(Exception):
         rv['message'] = self.message
         return rv
 
+
 def has_no_empty_params(rule):
     defaults = rule.defaults if rule.defaults is not None else ()
     arguments = rule.arguments if rule.arguments is not None else ()
     return len(defaults) >= len(arguments)
 
+
 def generate_sitemap(app):
     links = ['/admin/']
     for rule in app.url_map.iter_rules():
-        # Filter out rules we can't navigate to in a browser
-        # and rules that require parameters
         if "GET" in rule.methods and has_no_empty_params(rule):
             url = url_for(rule.endpoint, **(rule.defaults or {}))
             if "/admin/" not in url:
                 links.append(url)
 
-    links_html = "".join(["<li><a href='" + y + "'>" + y + "</a></li>" for y in links])
+    links_html = "".join(["<li><a href='" + y + "'>" +
+                         y + "</a></li>" for y in links])
     return """
         <div style="text-align: center;">
         <img style="max-height: 80px" src='https://storage.googleapis.com/breathecode/boilerplates/rigo-baby.jpeg' />
@@ -39,3 +43,24 @@ def generate_sitemap(app):
         <p>Start working on your project by following the <a href="https://start.4geeksacademy.com/starters/full-stack" target="_blank">Quick Start</a></p>
         <p>Remember to specify a real endpoint path like: </p>
         <ul style="text-align: left;">"""+links_html+"</ul></div>"
+
+# --- ROLE GUARD ---
+
+
+def role_required(*allowed_roles):
+    """
+    Uso:
+      @role_required("ADMIN")
+      @role_required("ADMIN", "EMPLEADO")
+    """
+    def wrapper(fn):
+        @wraps(fn)
+        def decorated(*args, **kwargs):
+            verify_jwt_in_request()
+            claims = get_jwt() or {}
+            rol = claims.get("rol")
+            if rol not in allowed_roles:
+                return jsonify({"error": "No autorizado", "detalle": f"Se requiere rol {allowed_roles}"}), 403
+            return fn(*args, **kwargs)
+        return decorated
+    return wrapper

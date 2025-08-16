@@ -1,7 +1,6 @@
+from . import db
 from sqlalchemy import ForeignKey, Numeric, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from src.database import db
-
 
 class OrderItem(db.Model):
     __tablename__ = "order_items"

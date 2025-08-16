@@ -1,6 +1,6 @@
+from . import db
 from sqlalchemy import String, Boolean, Numeric, Text
 from sqlalchemy.orm import Mapped, mapped_column
-from src.database import db
 
 class Product(db.Model):
     __tablename__ = "products"

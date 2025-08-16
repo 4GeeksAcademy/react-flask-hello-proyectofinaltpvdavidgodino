@@ -1,8 +1,8 @@
+from . import db
 from datetime import datetime
 from sqlalchemy import Enum, ForeignKey, Numeric, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
-from src.database import db
 
 class OrderStatus(enum.Enum):
     OPEN = "OPEN"

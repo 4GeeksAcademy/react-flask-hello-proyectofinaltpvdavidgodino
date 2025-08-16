@@ -6,6 +6,7 @@ from api.models import db, User, UserRole
 
 auth_bp = Blueprint("auth", __name__)
 
+
 @auth_bp.route("/check", methods=["GET"])
 def check():
     return {"status": "Auth routes ready"}, 200
@@ -13,16 +14,22 @@ def check():
 
 # ✅ Crear admin (solo desarrollo)
 @auth_bp.route("/create-admin", methods=["POST"])
+@auth_bp.route("/create-admin", methods=["POST"])
 def create_admin():
+    print("🛠 DEBUG: Se llamó a /create-admin")
     data = request.get_json()
+    print(f"📩 Datos recibidos: {data}")
+
     email = data.get("email")
     password = data.get("password")
     nombre = data.get("nombre")
 
     if not email or not password or not nombre:
+        print("⚠️ Faltan datos obligatorios")
         return jsonify({"error": "Faltan campos obligatorios"}), 400
 
     if User.query.filter_by(email=email).first():
+        print("⚠️ El usuario ya existe")
         return jsonify({"error": "El usuario ya existe"}), 400
 
     hashed_pw = generate_password_hash(password)
@@ -32,6 +39,7 @@ def create_admin():
         admin_role = UserRole(nombre="ADMIN")
         db.session.add(admin_role)
         db.session.commit()
+        print("✅ Rol ADMIN creado")
 
     new_user = User(
         email=email,
@@ -42,6 +50,7 @@ def create_admin():
     db.session.add(new_user)
     db.session.commit()
 
+    print("🎯 Admin creado correctamente")
     return jsonify({"message": "Admin creado correctamente", "user": new_user.serialize()}), 201
 
 
