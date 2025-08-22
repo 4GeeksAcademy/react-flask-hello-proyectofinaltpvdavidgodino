@@ -1,15 +1,9 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { getToken } from "../../api/client";
 
-export default function ProtectedRoute({ children, role }) {
-  const { user, loading } = useAuth();
-
-  if (loading) return <div style={{ padding: 24 }}>Cargando…</div>;
-  if (!user) return <Navigate to="/login" replace />;
-
-  if (role && user.role !== role) {
-    return <div style={{ padding: 24 }}>No autorizado</div>;
-  }
+export default function ProtectedRoute({ children }) {
+  const token = getToken();
+  if (!token) return <Navigate to="/login" replace />;
   return children;
 }

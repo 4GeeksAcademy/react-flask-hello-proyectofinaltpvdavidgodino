@@ -1,15 +1,19 @@
-import { Outlet } from "react-router-dom/dist"
-import ScrollToTop from "../components/ScrollToTop"
-import { Navbar } from "../components/Navbar"
-import { Footer } from "../components/Footer"
+import React from "react";
+import { Outlet, Link } from "react-router-dom";
 
-// Base component that maintains the navbar and footer throughout the page and the scroll to top functionality.
-export const Layout = () => {
-    return (
-        <ScrollToTop>
-            <Navbar />
-                <Outlet />
-            <Footer />
-        </ScrollToTop>
-    )
+export default function Layout() {
+  return (
+    <div style={{ fontFamily: "sans-serif" }}>
+      <nav style={{ padding: 12, borderBottom: "1px solid #ddd" }}>
+        <Link to="/" style={{ marginRight: 12 }}>Home</Link>
+        <Link to="/login" style={{ marginRight: 12 }}>Login</Link>
+        <Link to="/tickets">Tickets</Link>
+      </nav>
+
+      {/* IMPORTANTE!!!! Renderiza las rutas hijas */}
+      <div style={{ padding: 16 }}>
+        <Outlet />
+      </div>
+    </div>
+  );
 }

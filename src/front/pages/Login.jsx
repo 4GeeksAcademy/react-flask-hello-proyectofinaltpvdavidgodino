@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiPost, setToken } from "../../src/api/client"; // usa tu client.js
+import { apiPost, setToken } from "../../api/client";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -15,7 +15,6 @@ export default function Login() {
     setLoading(true);
     try {
       const resp = await apiPost("/auth/login", { email, password });
-      // resp = { access_token, role, user }
       setToken(resp.access_token);
       navigate("/tickets");
     } catch (err) {
