@@ -1,66 +1,175 @@
+from __future__ import annotations
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
 from api.models import db, Ticket, LineaTicket, EstadoTicket
 from api.utils import role_required
 
 tpv_bp = Blueprint("tpv", __name__)
 
+# ───────────────────────── Helpers ─────────────────────────
+
+def _j():
+    return request.get_json(silent=True) or {}
+
+def _as_int(value, default=None):
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+def _as_float(value, default=None):
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+# ───────────────────────── Tickets ─────────────────────────
+
 # Crear ticket (ABIERTO)
-@tpv_bp.route("/tickets", methods=["POST"])
+@tpv_bp.post("/tickets")
 @role_required("ADMIN", "EMPLEADO")
 def crear_ticket():
-    data = request.get_json() or {}
+    data = _j()
     mesa = data.get("mesa")
+    mesa = _as_int(mesa, None)
+    if mesa is None:
+        return jsonify({"error": "El campo 'mesa' (entero) es obligatorio"}), 400
+
     t = Ticket(mesa=mesa)
     db.session.add(t)
     db.session.commit()
     return jsonify(t.serialize()), 201
 
-# Obtener ticket
-@tpv_bp.route("/tickets/<int:ticket_id>", methods=["GET"])
+
+# Listar tickets con filtros opcionales
+# /tickets?estado=ABIERTO|CERRADO&mesa=10
+@tpv_bp.get("/tickets")
 @role_required("ADMIN", "EMPLEADO")
-def get_ticket(ticket_id):
+def listar_tickets():
+    estado = request.args.get("estado")
+    mesa = request.args.get("mesa")
+
+    q = Ticket.query
+    if estado:
+        estado = estado.upper().strip()
+        # Si el Enum guarda .value, comparamos por value
+        if estado not in (EstadoTicket.ABIERTO.value, EstadoTicket.CERRADO.value):
+            return jsonify({"error": "Parámetro 'estado' inválido"}), 400
+        q = q.filter(Ticket.estado == estado)
+    if mesa is not None:
+        mesa_int = _as_int(mesa, None)
+        if mesa_int is None:
+            return jsonify({"error": "El parámetro 'mesa' debe ser entero"}), 400
+        q = q.filter(Ticket.mesa == mesa_int)
+
+    q = q.order_by(Ticket.id.desc())
+    items = q.all()
+    return jsonify([t.serialize() for t in items]), 200
+
+
+# Obtener ticket
+@tpv_bp.get("/tickets/<int:ticket_id>")
+@role_required("ADMIN", "EMPLEADO")
+def get_ticket(ticket_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     return jsonify(t.serialize()), 200
 
-# Añadir línea
-@tpv_bp.route("/tickets/<int:ticket_id>/lineas", methods=["POST"])
+
+# Actualizar datos del ticket (p.ej. mover de mesa)
+@tpv_bp.patch("/tickets/<int:ticket_id>")
 @role_required("ADMIN", "EMPLEADO")
-def add_linea(ticket_id):
+def update_ticket(ticket_id: int):
+    t = Ticket.query.get_or_404(ticket_id)
+    data = _j()
+
+    if "mesa" in data:
+        mesa = _as_int(data.get("mesa"), None)
+        if mesa is None or mesa <= 0:
+            return jsonify({"error": "El campo 'mesa' debe ser entero positivo"}), 400
+        t.mesa = mesa
+
+    db.session.commit()
+    return jsonify(t.serialize()), 200
+
+
+# Reabrir ticket (solo ADMIN) si estaba cerrado
+@tpv_bp.post("/tickets/<int:ticket_id>/reabrir")
+@role_required("ADMIN")
+def reabrir_ticket(ticket_id: int):
+    t = Ticket.query.get_or_404(ticket_id)
+    if t.estado != EstadoTicket.CERRADO.value:
+        return jsonify({"error": "Solo se pueden reabrir tickets CERRADOS"}), 400
+    t.estado = EstadoTicket.ABIERTO.value
+    db.session.commit()
+    return jsonify(t.serialize()), 200
+
+
+# Eliminar ticket (solo ADMIN) — permitido solo si está ABIERTO
+@tpv_bp.delete("/tickets/<int:ticket_id>")
+@role_required("ADMIN")
+def delete_ticket(ticket_id: int):
+    t = Ticket.query.get_or_404(ticket_id)
+    if t.estado != EstadoTicket.ABIERTO.value:
+        return jsonify({"error": "Solo se pueden eliminar tickets ABIERTO"}), 400
+    db.session.delete(t)
+    db.session.commit()
+    return jsonify({"deleted": ticket_id}), 200
+
+# ───────────────────────── Líneas ─────────────────────────
+
+# Añadir línea
+@tpv_bp.post("/tickets/<int:ticket_id>/lineas")
+@role_required("ADMIN", "EMPLEADO")
+def add_linea(ticket_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     if t.estado != EstadoTicket.ABIERTO.value:
         return jsonify({"error": "Ticket no editable"}), 400
-    data = request.get_json() or {}
-    producto = data.get("producto")
-    cantidad = int(data.get("cantidad", 1))
-    precio_unitario = float(data.get("precio_unitario", 0))
-    if not producto or precio_unitario <= 0 or cantidad <= 0:
-        return jsonify({"error": "Datos de línea inválidos"}), 400
-    l = LineaTicket(ticket_id=t.id, producto=producto, cantidad=cantidad, precio_unitario=precio_unitario)
+
+    data = _j()
+    producto = (data.get("producto") or "").strip()
+    cantidad = _as_int(data.get("cantidad", 1), None)
+    precio_unitario = _as_float(data.get("precio_unitario", 0), None)
+
+    if not producto:
+        return jsonify({"error": "El campo 'producto' es obligatorio"}), 400
+    if cantidad is None or cantidad <= 0:
+        return jsonify({"error": "El campo 'cantidad' debe ser entero positivo"}), 400
+    if precio_unitario is None or precio_unitario <= 0:
+        return jsonify({"error": "El campo 'precio_unitario' debe ser número positivo"}), 400
+
+    l = LineaTicket(
+        ticket_id=t.id,
+        producto=producto,
+        cantidad=cantidad,
+        precio_unitario=precio_unitario
+    )
     db.session.add(l)
     t.recalc_total()
     db.session.commit()
     return jsonify(t.serialize()), 201
 
-# Eliminar línea (SOLO ADMIN, como pediste)
-@tpv_bp.route("/tickets/<int:ticket_id>/lineas/<int:linea_id>", methods=["DELETE"])
+
+# Eliminar línea (SOLO ADMIN)
+@tpv_bp.delete("/tickets/<int:ticket_id>/lineas/<int:linea_id>")
 @role_required("ADMIN")
-def delete_linea(ticket_id, linea_id):
+def delete_linea(ticket_id: int, linea_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     l = LineaTicket.query.get_or_404(linea_id)
     if l.ticket_id != t.id:
-        return jsonify({"error": "Línea no pertenece al ticket"}), 400
+        return jsonify({"error": "La línea no pertenece al ticket"}), 400
     if t.estado != EstadoTicket.ABIERTO.value:
         return jsonify({"error": "Ticket no editable"}), 400
+
     db.session.delete(l)
     t.recalc_total()
     db.session.commit()
     return jsonify(t.serialize()), 200
 
+# ───────────────────────── Flujo de cierre ─────────────────────────
+
 # Cerrar ticket (p.ej. listo para cobrar) - EMPLEADO puede cerrar
-@tpv_bp.route("/tickets/<int:ticket_id>/cerrar", methods=["POST"])
+@tpv_bp.post("/tickets/<int:ticket_id>/cerrar")
 @role_required("ADMIN", "EMPLEADO")
-def cerrar_ticket(ticket_id):
+def cerrar_ticket(ticket_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     if t.estado != EstadoTicket.ABIERTO.value:
         return jsonify({"error": "Estado inválido"}), 400
