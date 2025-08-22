@@ -1,18 +1,8 @@
 // src/api/client.js
-// Detecta automáticamente el backend en Codespaces: -3000 -> -5000
-const inferApiBase = () => {
-  const { origin } = window.location;
-  if (origin.includes("-3000") && origin.includes(".app.github.dev")) {
-    return origin.replace("-3000", "-5000") + "/api";
-  }
-  // fallback local
-  return "http://localhost:5000/api";
-};
+const API_BASE = import.meta.env.VITE_BACKEND_URL;  // 👈 Directo del .env
 
-const API_BASE = inferApiBase();
-
-export const getToken = () => sessionStorage.getItem("token");
-export const setToken = (t) => sessionStorage.setItem("token", t);
+export const getToken   = () => sessionStorage.getItem("token");
+export const setToken   = (t) => sessionStorage.setItem("token", t);
 export const clearToken = () => sessionStorage.removeItem("token");
 
 const headers = () => {
@@ -22,10 +12,19 @@ const headers = () => {
   return h;
 };
 
+async function handle(res) {
+  if (!res.ok) {
+    throw await res.json().catch(() => ({
+      error: res.statusText,
+      status: res.status
+    }));
+  }
+  return res.json();
+}
+
 export async function apiGet(path) {
   const res = await fetch(`${API_BASE}${path}`, { headers: headers() });
-  if (!res.ok) throw await res.json().catch(() => ({ error: res.statusText }));
-  return res.json();
+  return handle(res);
 }
 
 export async function apiPost(path, body) {
@@ -34,14 +33,15 @@ export async function apiPost(path, body) {
     headers: headers(),
     body: JSON.stringify(body ?? {}),
   });
-  if (!res.ok) throw await res.json().catch(() => ({ error: res.statusText }));
-  return res.json();
+  return handle(res);
 }
 
 export async function apiDelete(path) {
-  const res = await fetch(`${API_BASE}{path}`, { method: "DELETE", headers: headers() });
-  if (!res.ok) throw await res.json().catch(() => ({ error: res.statusText }));
-  return res.json();
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+  return handle(res);
 }
 
 export { API_BASE };
