@@ -7,57 +7,72 @@ export default function Mesas() {
   const navigate = useNavigate();
   const [tickets, setTickets] = useState([]);
 
-  // Cargar tickets existentes
-  useEffect(() => {
-    apiGet("/tpv/tickets?estado=ABIERTO")
-      .then(setTickets)
-      .catch(err => console.error("Error cargando tickets", err));
-  }, []);
-
-  // Buscar si una mesa ya tiene ticket abierto
-  const getTicketForMesa = (mesa) => {
-    return tickets.find(t => t.mesa === mesa && t.estado === "ABIERTO");
+  const loadTickets = async () => {
+    try {
+      const data = await apiGet("/tpv/tickets?estado=ABIERTO");
+      setTickets(data);
+    } catch (err) {
+      console.error("Error cargando tickets", err);
+    }
   };
 
-  const handleMesaClick = async (mesa) => {
-    const existente = getTicketForMesa(mesa);
+  useEffect(() => {
+    loadTickets();
+  }, []);
+
+  const crearTicket = async (mesa) => {
+    const existente = tickets.find(
+      t => Number(t.mesa) === Number(mesa) && t.estado === "ABIERTO"
+    );
     if (existente) {
       navigate(`/tickets/${existente.id}`);
-    } else {
-      try {
-        const nuevo = await apiPost("/tpv/tickets", { mesa });
-        navigate(`/tickets/${nuevo.id}`);
-      } catch (e) {
-        alert("No se pudo crear el ticket");
-      }
+      return;
+    }
+
+    try {
+      const nuevo = await apiPost("/tpv/tickets", { mesa });
+      navigate(`/tickets/${nuevo.id}`);
+    } catch (err) {
+      alert(err.error || "No se pudo crear el ticket");
     }
   };
 
   return (
-    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
+    <div style={{ padding: 24 }}>
       <h2>Mesas</h2>
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(5, 1fr)",
-        gap: "12px",
-        marginTop: 20
-      }}>
-        {Array.from({ length: 30 }, (_, i) => i + 1).map(mesa => (
-          <button
-            key={mesa}
-            onClick={() => handleMesaClick(mesa)}
-            style={{
-              padding: "24px",
-              fontSize: "18px",
-              border: "1px solid #ccc",
-              borderRadius: "8px",
-              background: getTicketForMesa(mesa) ? "#ffecb3" : "#e0f7fa",
-              cursor: "pointer"
-            }}
-          >
-            Mesa {mesa}
-          </button>
-        ))}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
+        {Array.from({ length: 30 }, (_, i) => {
+          const mesa = i + 1;
+          const ticket = tickets.find(
+            t => Number(t.mesa) === Number(mesa) && t.estado === "ABIERTO"
+          );
+
+          return (
+            <button
+              key={mesa}
+              onClick={() => crearTicket(mesa)}
+              style={{
+                padding: "20px",
+                fontSize: "16px",
+                background: ticket ? "#999" : "#eee",
+                border: "1px solid #333",
+                borderRadius: "6px",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <div>Mesa {mesa}</div>
+              {ticket && (
+                <div style={{ fontSize: "14px", marginTop: 6 }}>
+                  {Number(ticket.total).toFixed(2)} €
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
