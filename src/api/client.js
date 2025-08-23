@@ -1,4 +1,3 @@
-// src/api/client.js
 const API_BASE = import.meta.env.VITE_BACKEND_URL;  // 👈 Directo del .env
 
 export const getToken   = () => sessionStorage.getItem("token");

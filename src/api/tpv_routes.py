@@ -7,14 +7,17 @@ tpv_bp = Blueprint("tpv", __name__)
 
 # ───────────────────────── Helpers ─────────────────────────
 
+
 def _j():
     return request.get_json(silent=True) or {}
+
 
 def _as_int(value, default=None):
     try:
         return int(value)
     except Exception:
         return default
+
 
 def _as_float(value, default=None):
     try:
@@ -25,8 +28,10 @@ def _as_float(value, default=None):
 # ───────────────────────── Tickets ─────────────────────────
 
 # Crear ticket (ABIERTO)
+
+
 @tpv_bp.post("/tickets")
-@role_required("ADMIN", "EMPLEADO")
+@role_required("ADMIN", "CAMARERO")
 def crear_ticket():
     data = _j()
     mesa = data.get("mesa")
@@ -43,7 +48,7 @@ def crear_ticket():
 # Listar tickets con filtros opcionales
 # /tickets?estado=ABIERTO|CERRADO&mesa=10
 @tpv_bp.get("/tickets")
-@role_required("ADMIN", "EMPLEADO")
+@role_required("ADMIN", "CAMARERO")
 def listar_tickets():
     estado = request.args.get("estado")
     mesa = request.args.get("mesa")
@@ -68,7 +73,7 @@ def listar_tickets():
 
 # Obtener ticket
 @tpv_bp.get("/tickets/<int:ticket_id>")
-@role_required("ADMIN", "EMPLEADO")
+@role_required("ADMIN", "CAMARERO")
 def get_ticket(ticket_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     return jsonify(t.serialize()), 200
@@ -76,7 +81,7 @@ def get_ticket(ticket_id: int):
 
 # Actualizar datos del ticket (p.ej. mover de mesa)
 @tpv_bp.patch("/tickets/<int:ticket_id>")
-@role_required("ADMIN", "EMPLEADO")
+@role_required("ADMIN", "CAMARERO")
 def update_ticket(ticket_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     data = _j()
@@ -117,8 +122,10 @@ def delete_ticket(ticket_id: int):
 # ───────────────────────── Líneas ─────────────────────────
 
 # Añadir línea
+
+
 @tpv_bp.post("/tickets/<int:ticket_id>/lineas")
-@role_required("ADMIN", "EMPLEADO")
+@role_required("ADMIN", "CAMARERO")
 def add_linea(ticket_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     if t.estado != EstadoTicket.ABIERTO.value:
@@ -167,8 +174,10 @@ def delete_linea(ticket_id: int, linea_id: int):
 # ───────────────────────── Flujo de cierre ─────────────────────────
 
 # Cerrar ticket (p.ej. listo para cobrar) - EMPLEADO puede cerrar
+
+
 @tpv_bp.post("/tickets/<int:ticket_id>/cerrar")
-@role_required("ADMIN", "EMPLEADO")
+@role_required("ADMIN", "CAMARERO")
 def cerrar_ticket(ticket_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     if t.estado != EstadoTicket.ABIERTO.value:

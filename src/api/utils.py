@@ -1,4 +1,4 @@
-from flask import jsonify, url_for
+from flask import jsonify, url_for, request
 from functools import wraps
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 
@@ -15,7 +15,7 @@ class APIException(Exception):
 
     def to_dict(self):
         rv = dict(self.payload or ())
-        rv['message'] = self.message
+        rv["message"] = self.message
         return rv
 
 
@@ -26,15 +26,13 @@ def has_no_empty_params(rule):
 
 
 def generate_sitemap(app):
-    links = ['/admin/']
+    links = ["/admin/"]
     for rule in app.url_map.iter_rules():
         if "GET" in rule.methods and has_no_empty_params(rule):
             url = url_for(rule.endpoint, **(rule.defaults or {}))
             if "/admin/" not in url:
                 links.append(url)
-
-    links_html = "".join(["<li><a href='" + y + "'>" +
-                         y + "</a></li>" for y in links])
+    links_html = "".join([f"<li><a href='{y}'>{y}</a></li>" for y in links])
     return """
         <div style="text-align: center;">
         <img style="max-height: 80px" src='https://storage.googleapis.com/breathecode/boilerplates/rigo-baby.jpeg' />
@@ -42,25 +40,22 @@ def generate_sitemap(app):
         <p>API HOST: <script>document.write('<input style="padding: 5px; width: 300px" type="text" value="'+window.location.href+'" />');</script></p>
         <p>Start working on your project by following the <a href="https://start.4geeksacademy.com/starters/full-stack" target="_blank">Quick Start</a></p>
         <p>Remember to specify a real endpoint path like: </p>
-        <ul style="text-align: left;">"""+links_html+"</ul></div>"
-
-# --- ROLE GUARD ---
+        <ul style="text-align: left;">""" + links_html + "</ul></div>"
 
 
-def role_required(*allowed_roles):
-    """
-    Uso:
-      @role_required("ADMIN")
-      @role_required("ADMIN", "EMPLEADO")
-    """
+def role_required(*roles):
+    allowed = {(r or "").strip().upper() for r in roles if r}
+
     def wrapper(fn):
         @wraps(fn)
         def decorated(*args, **kwargs):
+            if request.method == "OPTIONS":
+                return ("", 204)
             verify_jwt_in_request()
             claims = get_jwt() or {}
-            rol = claims.get("rol")
-            if rol not in allowed_roles:
-                return jsonify({"error": "No autorizado", "detalle": f"Se requiere rol {allowed_roles}"}), 403
+            role = (claims.get("role") or claims.get("rol") or "").strip().upper()
+            if allowed and role not in allowed:
+                return jsonify({"error": "No autorizado", "detalle": f"Se requiere rol {tuple(sorted(allowed))}"}), 403
             return fn(*args, **kwargs)
         return decorated
     return wrapper

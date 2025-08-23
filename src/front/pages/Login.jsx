@@ -1,6 +1,7 @@
+// src/front/pages/Login.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiPost, setToken } from "../../api/client";
+import { apiPost, apiGet, setToken } from "../../api/client";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -15,9 +16,19 @@ export default function Login() {
     setLoading(true);
     try {
       const resp = await apiPost("/auth/login", { email, password });
+      console.log("[login] resp =", resp);
+      if (!resp?.access_token) {
+        throw { error: "Login OK sin token (respuesta inesperada)" };
+      }
       setToken(resp.access_token);
+
+      // ✅ Verifica inmediatamente que el backend te reconoce
+      const me = await apiGet("/auth/me");
+      console.log("[login] /auth/me =", me);
+
       navigate("/tickets");
     } catch (err) {
+      console.warn("[login] error =", err);
       setError(err?.error || err?.message || "Las credenciales no son válidas");
     } finally {
       setLoading(false);
@@ -30,25 +41,17 @@ export default function Login() {
       <form onSubmit={onSubmit}>
         <label>Email</label>
         <input
-          type="email"
-          value={email}
-          required
-          onChange={(e) => setEmail(e.target.value)}
+          type="email" value={email} required autoFocus
+          onChange={e => setEmail(e.target.value)}
           style={{ width: "100%", marginBottom: 8 }}
-          autoFocus
         />
-
         <label>Contraseña</label>
         <input
-          type="password"
-          value={password}
-          required
-          onChange={(e) => setPassword(e.target.value)}
+          type="password" value={password} required
+          onChange={e => setPassword(e.target.value)}
           style={{ width: "100%", marginBottom: 8 }}
         />
-
         {error && <div style={{ color: "crimson", marginBottom: 8 }}>{error}</div>}
-
         <button type="submit" disabled={loading} style={{ width: "100%", padding: 10 }}>
           {loading ? "Entrando..." : "Entrar"}
         </button>

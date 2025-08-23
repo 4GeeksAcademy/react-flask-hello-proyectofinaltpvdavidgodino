@@ -7,14 +7,16 @@ export default function Tickets() {
   const [mesa, setMesa] = useState(1);
   const [estado, setEstado] = useState(""); // "", "ABIERTO", "CERRADO"
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  async function load() {
+  async function load(nextEstado = estado) {
     setError("");
+    setInfo("");
     setLoading(true);
     try {
-      const qs = estado ? `?estado=${estado}` : "";
+      const qs = nextEstado ? `?estado=${nextEstado}` : "";
       const data = await apiGet(`/tpv/tickets${qs}`);
       setTickets(data);
     } catch (e) {
@@ -30,10 +32,14 @@ export default function Tickets() {
     e?.preventDefault();
     setCreating(true);
     setError("");
+    setInfo("");
     try {
-      await apiPost("/tpv/tickets", { mesa: Number(mesa) });
+      const created = await apiPost("/tpv/tickets", { mesa: Number(mesa) });
+      // Muestra feedback y asegúrate de que se vea (quita filtros)
+      setInfo(`Ticket #${created.id} creado correctamente`);
       setMesa(1);
-      await load();
+      setEstado("");       // ← mostrar "Todos" para que salga el nuevo (ABIERTO)
+      await load("");      // ← recarga sin filtro
     } catch (e) {
       setError(e?.error || e?.message || "No se pudo crear el ticket");
     } finally {
@@ -68,7 +74,9 @@ export default function Tickets() {
         </form>
       </div>
 
+      {info && <div style={{ color: "green", marginBottom: 8 }}>{info}</div>}
       {error && <div style={{ color: "crimson", marginBottom: 8 }}>{error}</div>}
+
       {loading ? (
         <div>Cargando…</div>
       ) : tickets.length === 0 ? (
