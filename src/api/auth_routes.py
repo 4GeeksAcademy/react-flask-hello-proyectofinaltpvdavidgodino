@@ -1,20 +1,15 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_jwt_extended import (
-    jwt_required, get_jwt, create_access_token, get_jwt_identity
-)
+from flask_jwt_extended import jwt_required, get_jwt, create_access_token, get_jwt_identity
 from datetime import timedelta
 from api.models import db, User, UserRole
 
 auth_bp = Blueprint("auth", __name__)
 
-# ────────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ────────────────────────────────────────────────────────────────────────────────
 
 def _json():
-    """get_json seguro."""
     return request.get_json(silent=True) or {}
+
 
 def _get_or_create_role(nombre: str) -> UserRole:
     rol = UserRole.query.filter_by(nombre=nombre).first()
@@ -24,6 +19,7 @@ def _get_or_create_role(nombre: str) -> UserRole:
         db.session.commit()
     return rol
 
+
 def _serialize_user(u: User):
     return {
         "id": u.id,
@@ -32,46 +28,33 @@ def _serialize_user(u: User):
         "role": u.role.nombre if getattr(u, "role", None) else None
     }
 
-# ────────────────────────────────────────────────────────────────────────────────
-# Endpoints
-# ────────────────────────────────────────────────────────────────────────────────
 
 @auth_bp.get("/check")
 def check():
     return {"status": "Auth routes ready"}, 200
 
 
-#  Solo para desarrollo: crea un ADMIN si no existe.
-# Deshabilítalo en producción.
 @auth_bp.post("/create-admin")
 def create_admin():
     data = _json()
-    email = (data.get("email") or "").strip().lower()
-    password = data.get("password") or ""
+    email = (data.get("email") or "admin@easytpv.local").strip().lower()
+    password = data.get("password") or "admin123"
     nombre = data.get("nombre") or "Admin"
 
-    if not email or not password:
-        return jsonify({"error": "Faltan campos obligatorios"}), 400
-
-    if User.query.filter_by(email=email).first():
-        return jsonify({"error": "El usuario ya existe"}), 400
-
-    hashed_pw = generate_password_hash(password)
     admin_role = _get_or_create_role("ADMIN")
 
-    new_user = User(
-        email=email,
-        password=hashed_pw,
-        nombre=nombre,
-        role_id=admin_role.id
-    )
-    db.session.add(new_user)
-    db.session.commit()
+    user = User.query.filter_by(email=email).first()
+    if user:
+        user.password = generate_password_hash(password)
+        user.nombre = nombre
+        user.role_id = admin_role.id
+    else:
+        user = User(email=email, password=generate_password_hash(
+            password), nombre=nombre, role_id=admin_role.id)
+        db.session.add(user)
 
-    return jsonify({
-        "message": "Admin creado correctamente",
-        "user": _serialize_user(new_user)
-    }), 201
+    db.session.commit()
+    return jsonify({"message": "Admin OK", "user": _serialize_user(user)}), 200
 
 
 @auth_bp.post("/login")
@@ -81,31 +64,28 @@ def login():
     password = data.get("password") or ""
 
     if not email or not password:
-        return jsonify({"error": "Email y password requeridos"}), 400
+        return jsonify({"error": "Usuario incorrecto"}), 400
 
     user = User.query.filter_by(email=email).first()
     if not user or not check_password_hash(user.password, password):
-        return jsonify({"error": "Credenciales inválidas"}), 401
+        return jsonify({"error": "Usuario incorrecto"}), 401
 
     role = user.role.nombre if user.role else None
 
     access_token = create_access_token(
         identity=user.id,
         additional_claims={"role": role},
-        expires_delta=timedelta(hours=12)
+        expires_delta=timedelta(hours=1)
     )
-    return jsonify({
-        "access_token": access_token,
-        "role": role,
-        "user": _serialize_user(user)
-    }), 200
+
+    return jsonify({"access_token": access_token, "role": role, "user": _serialize_user(user)}), 200
 
 
 @auth_bp.post("/register")
 @jwt_required()
 def register():
     claims = get_jwt()
-    requester_role = claims.get("role")
+    requester_role = claims.get("rol")  # <- clave correcta en el JWT
 
     if requester_role != "ADMIN":
         return jsonify({"error": "No autorizado"}), 403
@@ -122,25 +102,16 @@ def register():
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "El usuario ya existe"}), 400
 
-    hashed_pw = generate_password_hash(password)
     target_role = _get_or_create_role(role_name)
 
-    new_user = User(
-        email=email,
-        password=hashed_pw,
-        nombre=nombre,
-        role_id=target_role.id
-    )
+    new_user = User(email=email, password=generate_password_hash(
+        password), nombre=nombre, role_id=target_role.id)
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({
-        "message": "Usuario creado correctamente",
-        "user": _serialize_user(new_user)
-    }), 201
+    return jsonify({"message": "Usuario creado correctamente", "user": _serialize_user(new_user)}), 201
 
 
-# Info del usuario autenticado (para el front)
 @auth_bp.get("/me")
 @jwt_required()
 def me():

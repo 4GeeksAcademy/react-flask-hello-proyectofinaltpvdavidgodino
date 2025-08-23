@@ -16,9 +16,9 @@ export default function Login() {
     try {
       const resp = await apiPost("/auth/login", { email, password });
       setToken(resp.access_token);
-      navigate("/mesas"); 
+      navigate("/mesas");
     } catch (err) {
-      setError(err?.error || err?.message || "Las credenciales no son válidas");
+      setError("Usuario incorrecto");
     } finally {
       setLoading(false);
     }

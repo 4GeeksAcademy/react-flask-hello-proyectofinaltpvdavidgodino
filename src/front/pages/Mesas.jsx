@@ -1,7 +1,7 @@
 // src/front/pages/Mesas.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiGet, apiPost } from "../../api/client";
+import { apiGet, apiPost, clearToken } from "../../api/client";
 
 export default function Mesas() {
   const navigate = useNavigate();
@@ -18,6 +18,8 @@ export default function Mesas() {
 
   useEffect(() => {
     loadTickets();
+    const id = setInterval(loadTickets, 5000);
+    return () => clearInterval(id);
   }, []);
 
   const crearOTraerTicket = async (mesa) => {
@@ -40,20 +42,21 @@ export default function Mesas() {
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <h2>Mesas</h2>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <h2 style={{ margin: 0 }}>Mesas</h2>
+          <button
+            onClick={() => navigate("/tickets")}
+            style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee", cursor: "pointer" }}
+          >
+            Tickets abiertos ({abiertasCount})
+          </button>
+        </div>
         <button
-          onClick={() => navigate("/tickets")}
-          style={{
-            padding: "8px 12px",
-            fontSize: 14,
-            background: "#eee",
-            border: "1px solid #333",
-            borderRadius: 6,
-            cursor: "pointer",
-          }}
+          onClick={() => { clearToken(); navigate("/login", { replace: true }); }}
+          style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee", cursor: "pointer" }}
         >
-          Tickets abiertos ({abiertasCount})
+          Salir
         </button>
       </div>
 
@@ -68,21 +71,21 @@ export default function Mesas() {
               key={mesa}
               onClick={() => crearOTraerTicket(mesa)}
               style={{
-                padding: "20px",
-                fontSize: "16px",
-                background: ticket ? "#999" : "#eee",
+                padding: 20,
+                fontSize: 16,
+                background: ticket ? "#ddd" : "#eee",
                 border: "1px solid #333",
-                borderRadius: "6px",
+                borderRadius: 6,
                 cursor: "pointer",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "center",
-                alignItems: "center",
+                alignItems: "center"
               }}
             >
               <div>Mesa {mesa}</div>
               {ticket && (
-                <div style={{ fontSize: "14px", marginTop: 6 }}>
+                <div style={{ fontSize: 14, marginTop: 6 }}>
                   {Number(ticket.total).toFixed(2)} €
                 </div>
               )}

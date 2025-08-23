@@ -23,17 +23,19 @@ def _as_float(value, default=None):
 @tpv_bp.post("/tickets")
 @role_required("ADMIN", "CAMARERO")
 def crear_ticket():
-    data = _j()
-    mesa = _as_int(data.get("mesa"), None)
-    if mesa is None:
+    data = request.get_json(silent=True) or {}
+    mesa_raw = data.get("mesa")
+    try:
+        mesa = int(mesa_raw)
+    except Exception:
         return jsonify({"error": "El campo 'mesa' (entero) es obligatorio"}), 400
 
-    ya = Ticket.query.filter(
+    existente = Ticket.query.filter(
         Ticket.mesa == mesa,
         Ticket.estado == EstadoTicket.ABIERTO.value
     ).first()
-    if ya:
-        return jsonify(ya.serialize() | {"already_existed": True}), 200
+    if existente:
+        return jsonify(existente.serialize()), 200
 
     t = Ticket(mesa=mesa)
     db.session.add(t)

@@ -1,4 +1,3 @@
-// src/front/pages/TicketDetail.jsx
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiGet, apiPost } from "../../api/client";
@@ -49,11 +48,7 @@ export default function TicketDetail() {
 
   return (
     <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <button onClick={() => nav("/mesas")}>← Mesas</button>
-        <button onClick={cerrar} disabled={t.estado !== "ABIERTO"}>Cerrar ticket</button>
-      </div>
-
+      <button onClick={() => nav("/mesas")}>← Mesas</button>
       <h2>Ticket #{t.id} — mesa {t.mesa} — {t.estado}</h2>
 
       <div style={{ margin: "12px 0", padding: 12, border: "1px solid #ddd" }}>
@@ -94,6 +89,10 @@ export default function TicketDetail() {
           </tr>
         </tfoot>
       </table>
+
+      <div style={{ marginTop: 12 }}>
+        <button onClick={cerrar} disabled={t.estado !== "ABIERTO"}>Cerrar ticket</button>
+      </div>
     </div>
   );
 }

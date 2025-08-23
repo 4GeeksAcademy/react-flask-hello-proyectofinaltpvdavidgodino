@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_BACKEND_URL;  // 👈 Directo del .env
+// src/api/client.js
+const API_BASE = "/api";
 
 export const getToken   = () => sessionStorage.getItem("token");
 export const setToken   = (t) => sessionStorage.setItem("token", t);
@@ -13,10 +14,11 @@ const headers = () => {
 
 async function handle(res) {
   if (!res.ok) {
-    throw await res.json().catch(() => ({
-      error: res.statusText,
-      status: res.status
-    }));
+    if (res.status === 401 || res.status === 403) {
+      clearToken();
+      window.location.href = "/login";
+    }
+    throw await res.json().catch(() => ({ error: res.statusText, status: res.status }));
   }
   return res.json();
 }
