@@ -5,12 +5,8 @@ from api.utils import role_required
 
 tpv_bp = Blueprint("tpv", __name__)
 
-# ───────────────────────── Helpers ─────────────────────────
-
-
 def _j():
     return request.get_json(silent=True) or {}
-
 
 def _as_int(value, default=None):
     try:
@@ -18,35 +14,32 @@ def _as_int(value, default=None):
     except Exception:
         return default
 
-
 def _as_float(value, default=None):
     try:
         return float(value)
     except Exception:
         return default
 
-# ───────────────────────── Tickets ─────────────────────────
-
-# Crear ticket (ABIERTO)
-
-
 @tpv_bp.post("/tickets")
 @role_required("ADMIN", "CAMARERO")
 def crear_ticket():
     data = _j()
-    mesa = data.get("mesa")
-    mesa = _as_int(mesa, None)
+    mesa = _as_int(data.get("mesa"), None)
     if mesa is None:
         return jsonify({"error": "El campo 'mesa' (entero) es obligatorio"}), 400
+
+    ya = Ticket.query.filter(
+        Ticket.mesa == mesa,
+        Ticket.estado == EstadoTicket.ABIERTO.value
+    ).first()
+    if ya:
+        return jsonify(ya.serialize() | {"already_existed": True}), 200
 
     t = Ticket(mesa=mesa)
     db.session.add(t)
     db.session.commit()
     return jsonify(t.serialize()), 201
 
-
-# Listar tickets con filtros opcionales
-# /tickets?estado=ABIERTO|CERRADO&mesa=10
 @tpv_bp.get("/tickets")
 @role_required("ADMIN", "CAMARERO")
 def listar_tickets():
@@ -56,7 +49,6 @@ def listar_tickets():
     q = Ticket.query
     if estado:
         estado = estado.upper().strip()
-        # Si el Enum guarda .value, comparamos por value
         if estado not in (EstadoTicket.ABIERTO.value, EstadoTicket.CERRADO.value):
             return jsonify({"error": "Parámetro 'estado' inválido"}), 400
         q = q.filter(Ticket.estado == estado)
@@ -70,16 +62,12 @@ def listar_tickets():
     items = q.all()
     return jsonify([t.serialize() for t in items]), 200
 
-
-# Obtener ticket
 @tpv_bp.get("/tickets/<int:ticket_id>")
 @role_required("ADMIN", "CAMARERO")
 def get_ticket(ticket_id: int):
     t = Ticket.query.get_or_404(ticket_id)
     return jsonify(t.serialize()), 200
 
-
-# Actualizar datos del ticket (p.ej. mover de mesa)
 @tpv_bp.patch("/tickets/<int:ticket_id>")
 @role_required("ADMIN", "CAMARERO")
 def update_ticket(ticket_id: int):
@@ -95,8 +83,6 @@ def update_ticket(ticket_id: int):
     db.session.commit()
     return jsonify(t.serialize()), 200
 
-
-# Reabrir ticket (solo ADMIN) si estaba cerrado
 @tpv_bp.post("/tickets/<int:ticket_id>/reabrir")
 @role_required("ADMIN")
 def reabrir_ticket(ticket_id: int):
@@ -107,8 +93,6 @@ def reabrir_ticket(ticket_id: int):
     db.session.commit()
     return jsonify(t.serialize()), 200
 
-
-# Eliminar ticket (solo ADMIN) — permitido solo si está ABIERTO
 @tpv_bp.delete("/tickets/<int:ticket_id>")
 @role_required("ADMIN")
 def delete_ticket(ticket_id: int):
@@ -118,11 +102,6 @@ def delete_ticket(ticket_id: int):
     db.session.delete(t)
     db.session.commit()
     return jsonify({"deleted": ticket_id}), 200
-
-# ───────────────────────── Líneas ─────────────────────────
-
-# Añadir línea
-
 
 @tpv_bp.post("/tickets/<int:ticket_id>/lineas")
 @role_required("ADMIN", "CAMARERO")
@@ -154,8 +133,6 @@ def add_linea(ticket_id: int):
     db.session.commit()
     return jsonify(t.serialize()), 201
 
-
-# Eliminar línea (SOLO ADMIN)
 @tpv_bp.delete("/tickets/<int:ticket_id>/lineas/<int:linea_id>")
 @role_required("ADMIN")
 def delete_linea(ticket_id: int, linea_id: int):
@@ -170,11 +147,6 @@ def delete_linea(ticket_id: int, linea_id: int):
     t.recalc_total()
     db.session.commit()
     return jsonify(t.serialize()), 200
-
-# ───────────────────────── Flujo de cierre ─────────────────────────
-
-# Cerrar ticket (p.ej. listo para cobrar) - EMPLEADO puede cerrar
-
 
 @tpv_bp.post("/tickets/<int:ticket_id>/cerrar")
 @role_required("ADMIN", "CAMARERO")

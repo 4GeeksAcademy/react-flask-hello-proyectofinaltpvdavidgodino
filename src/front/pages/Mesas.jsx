@@ -20,37 +20,53 @@ export default function Mesas() {
     loadTickets();
   }, []);
 
-  const crearTicket = async (mesa) => {
+  const crearOTraerTicket = async (mesa) => {
     const existente = tickets.find(
-      t => Number(t.mesa) === Number(mesa) && t.estado === "ABIERTO"
+      (t) => Number(t.mesa) === Number(mesa) && t.estado === "ABIERTO"
     );
     if (existente) {
       navigate(`/tickets/${existente.id}`);
       return;
     }
-
     try {
       const nuevo = await apiPost("/tpv/tickets", { mesa });
       navigate(`/tickets/${nuevo.id}`);
     } catch (err) {
-      alert(err.error || "No se pudo crear el ticket");
+      alert(err.error || "No se pudo abrir/crear el ticket");
     }
   };
 
+  const abiertasCount = tickets.length;
+
   return (
     <div style={{ padding: 24 }}>
-      <h2>Mesas</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h2>Mesas</h2>
+        <button
+          onClick={() => navigate("/tickets")}
+          style={{
+            padding: "8px 12px",
+            fontSize: 14,
+            background: "#eee",
+            border: "1px solid #333",
+            borderRadius: 6,
+            cursor: "pointer",
+          }}
+        >
+          Tickets abiertos ({abiertasCount})
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginTop: 12 }}>
         {Array.from({ length: 30 }, (_, i) => {
           const mesa = i + 1;
           const ticket = tickets.find(
-            t => Number(t.mesa) === Number(mesa) && t.estado === "ABIERTO"
+            (t) => Number(t.mesa) === Number(mesa) && t.estado === "ABIERTO"
           );
-
           return (
             <button
               key={mesa}
-              onClick={() => crearTicket(mesa)}
+              onClick={() => crearOTraerTicket(mesa)}
               style={{
                 padding: "20px",
                 fontSize: "16px",
