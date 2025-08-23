@@ -1,48 +1,54 @@
-// front/routes.jsx
 import React from "react";
-import { createBrowserRouter } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import Layout from "./pages/Layout.jsx";
-import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
 import Tickets from "./pages/Tickets.jsx";
 import TicketDetail from "./pages/TicketDetail.jsx";
-import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import Mesas from "./pages/Mesas.jsx";
 
-const BASENAME = import.meta.env.VITE_BASENAME || "/";
+import { getToken } from "../api/client";
 
-export const router = createBrowserRouter(
-  [
-    {
-      path: "/",
-      element: <Layout />,
-      children: [
-        // Públicas
-        { index: true, element: <Home /> },
-        { path: "login", element: <Login /> },
+function RequireAuth({ children }) {
+  const t = getToken();
+  if (!t) return <Navigate to="/login" replace />;
+  return children;
+}
 
-        // Privadas
-        {
-          path: "tickets",
-          element: (
-            <ProtectedRoute>
+export default function AppRoutes() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/mesas" replace />} />
+        <Route path="/login" element={<Login />} />
+
+        <Route
+          path="/mesas"
+          element={
+            <RequireAuth>
+              <Mesas />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/tickets"
+          element={
+            <RequireAuth>
               <Tickets />
-            </ProtectedRoute>
-          ),
-        },
-        {
-          path: "ticket/:id",
-          element: (
-            <ProtectedRoute>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/tickets/:id"
+          element={
+            <RequireAuth>
               <TicketDetail />
-            </ProtectedRoute>
-          ),
-        },
+            </RequireAuth>
+          }
+        />
 
-        // Fallback
-        { path: "*", element: <Home /> },
-      ],
-    },
-  ],
-  { basename: BASENAME }
-);
+        <Route path="*" element={<Navigate to="/mesas" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
