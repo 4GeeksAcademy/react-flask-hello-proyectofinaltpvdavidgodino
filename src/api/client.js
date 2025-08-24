@@ -1,5 +1,5 @@
 // src/api/client.js
-const API_BASE = "/api";
+const API_BASE = import.meta.env.VITE_BACKEND_URL; // Debe ser .../api (con /api al final)
 
 export const getToken   = () => sessionStorage.getItem("token");
 export const setToken   = (t) => sessionStorage.setItem("token", t);
@@ -14,18 +14,9 @@ const headers = () => {
 
 async function handle(res) {
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      clearToken();
-      window.location.href = "/login";
-    }
     throw await res.json().catch(() => ({ error: res.statusText, status: res.status }));
   }
   return res.json();
-}
-
-export async function apiGet(path) {
-  const res = await fetch(`${API_BASE}${path}`, { headers: headers() });
-  return handle(res);
 }
 
 export async function apiPost(path, body) {
@@ -37,6 +28,11 @@ export async function apiPost(path, body) {
   return handle(res);
 }
 
+export async function apiGet(path) {
+  const res = await fetch(`${API_BASE}${path}`, { headers: headers() });
+  return handle(res);
+}
+
 export async function apiDelete(path) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "DELETE",
@@ -45,4 +41,4 @@ export async function apiDelete(path) {
   return handle(res);
 }
 
-export { API_BASE };
+export { API_BASE };5

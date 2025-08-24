@@ -6,10 +6,8 @@ from api.models import db, User, UserRole
 
 auth_bp = Blueprint("auth", __name__)
 
-
 def _json():
     return request.get_json(silent=True) or {}
-
 
 def _get_or_create_role(nombre: str) -> UserRole:
     rol = UserRole.query.filter_by(nombre=nombre).first()
@@ -19,43 +17,38 @@ def _get_or_create_role(nombre: str) -> UserRole:
         db.session.commit()
     return rol
 
-
 def _serialize_user(u: User):
     return {
         "id": u.id,
         "email": u.email,
         "nombre": getattr(u, "nombre", None),
-        "role": u.role.nombre if getattr(u, "role", None) else None
+        "role": u.role.nombre if getattr(u, "role", None) else None,
     }
-
 
 @auth_bp.get("/check")
 def check():
     return {"status": "Auth routes ready"}, 200
 
-
 @auth_bp.post("/create-admin")
 def create_admin():
     data = _json()
-    email = (data.get("email") or "admin@easytpv.local").strip().lower()
-    password = data.get("password") or "admin123"
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
     nombre = data.get("nombre") or "Admin"
 
+    if not email or not password:
+        return jsonify({"error": "Faltan campos obligatorios"}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "El usuario ya existe"}), 400
+
+    hashed_pw = generate_password_hash(password)
     admin_role = _get_or_create_role("ADMIN")
 
-    user = User.query.filter_by(email=email).first()
-    if user:
-        user.password = generate_password_hash(password)
-        user.nombre = nombre
-        user.role_id = admin_role.id
-    else:
-        user = User(email=email, password=generate_password_hash(
-            password), nombre=nombre, role_id=admin_role.id)
-        db.session.add(user)
-
+    new_user = User(email=email, password=hashed_pw, nombre=nombre, role_id=admin_role.id)
+    db.session.add(new_user)
     db.session.commit()
-    return jsonify({"message": "Admin OK", "user": _serialize_user(user)}), 200
 
+    return jsonify({"message": "Admin OK", "user": _serialize_user(new_user)}), 201
 
 @auth_bp.post("/login")
 def login():
@@ -74,18 +67,21 @@ def login():
 
     access_token = create_access_token(
         identity=user.id,
-        additional_claims={"role": role},
-        expires_delta=timedelta(hours=1)
+        additional_claims={"rol": role},
+        expires_delta=timedelta(hours=1),
     )
 
-    return jsonify({"access_token": access_token, "role": role, "user": _serialize_user(user)}), 200
-
+    return jsonify({
+        "access_token": access_token,
+        "role": role,
+        "user": _serialize_user(user),
+    }), 200
 
 @auth_bp.post("/register")
 @jwt_required()
 def register():
     claims = get_jwt()
-    requester_role = claims.get("rol")  # <- clave correcta en el JWT
+    requester_role = claims.get("rol")  # <- leemos 'rol' del JWT
 
     if requester_role != "ADMIN":
         return jsonify({"error": "No autorizado"}), 403
@@ -98,19 +94,17 @@ def register():
 
     if not email or not password or not nombre:
         return jsonify({"error": "Faltan campos obligatorios"}), 400
-
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "El usuario ya existe"}), 400
 
+    hashed_pw = generate_password_hash(password)
     target_role = _get_or_create_role(role_name)
 
-    new_user = User(email=email, password=generate_password_hash(
-        password), nombre=nombre, role_id=target_role.id)
+    new_user = User(email=email, password=hashed_pw, nombre=nombre, role_id=target_role.id)
     db.session.add(new_user)
     db.session.commit()
 
     return jsonify({"message": "Usuario creado correctamente", "user": _serialize_user(new_user)}), 201
-
 
 @auth_bp.get("/me")
 @jwt_required()
