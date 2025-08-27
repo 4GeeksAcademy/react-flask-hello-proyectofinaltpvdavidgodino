@@ -1,57 +1,43 @@
+// src/front/pages/Login.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiPost, setToken } from "../../api/client";
+import { apiPost } from "../../api/client";  // ← esta ruta es correcta con tu estructura
+import { useAuth } from "../AuthContext";
 
 export default function Login() {
-  const navigate = useNavigate();
   const [email, setEmail] = useState("admin@easytpv.local");
   const [password, setPassword] = useState("admin123");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { setToken } = useAuth();
 
-  async function onSubmit(e) {
+  const onSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
     try {
-      const resp = await apiPost("/auth/login", { email, password });
-      setToken(resp.access_token);
-      navigate("/mesas");
+      const data = await apiPost("/auth/login", { email, password }); // ← sin /api
+      const token = data?.access_token;
+      if (!token) {
+        setError("Usuario incorrecto");
+        return;
+      }
+      setToken(token);
+      navigate("/mesas", { replace: true });
     } catch (err) {
-      setError("Usuario incorrecto");
-    } finally {
-      setLoading(false);
+      setError(err.message || "Usuario incorrecto");
     }
-  }
+  };
 
   return (
-    <div style={{ maxWidth: 360, margin: "64px auto", fontFamily: "sans-serif" }}>
-      <h2>Iniciar sesión</h2>
+    <div style={{ maxWidth: 480, margin: "32px auto" }}>
+      <h1>Iniciar sesión</h1>
       <form onSubmit={onSubmit}>
         <label>Email</label>
-        <input
-          type="email"
-          value={email}
-          required
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ width: "100%", marginBottom: 8 }}
-          autoFocus
-        />
-
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <label>Contraseña</label>
-        <input
-          type="password"
-          value={password}
-          required
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ width: "100%", marginBottom: 8 }}
-        />
-
-        {error && <div style={{ color: "crimson", marginBottom: 8 }}>{error}</div>}
-
-        <button type="submit" disabled={loading} style={{ width: "100%", padding: 10 }}>
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        {error && <div style={{ color: "#b00020", marginTop: 8 }}>{error}</div>}
+        <button type="submit" style={{ marginTop: 12 }}>Entrar</button>
       </form>
     </div>
   );

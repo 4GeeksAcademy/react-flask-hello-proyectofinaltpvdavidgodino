@@ -2,6 +2,8 @@ from __future__ import annotations
 from flask import Blueprint, request, jsonify
 from api.models import db, Ticket, LineaTicket, EstadoTicket
 from api.utils import role_required
+from flask_jwt_extended import jwt_required   
+from datetime import datetime                 
 
 tpv_bp = Blueprint("tpv", __name__)
 
@@ -23,21 +25,20 @@ def _as_float(value, default=None):
 @tpv_bp.post("/tickets")
 @role_required("ADMIN", "CAMARERO")
 def crear_ticket():
-    data = request.get_json(silent=True) or {}
-    mesa_raw = data.get("mesa")
-    try:
-        mesa = int(mesa_raw)
-    except Exception:
-        return jsonify({"error": "El campo 'mesa' (entero) es obligatorio"}), 400
+    data = _j()
+    mesa = _as_int(data.get("mesa"), None)
+    if mesa is None or mesa <= 0:
+        return jsonify({"error": "El campo 'mesa' (entero positivo) es obligatorio"}), 400
 
-    existente = Ticket.query.filter(
-        Ticket.mesa == mesa,
-        Ticket.estado == EstadoTicket.ABIERTO.value
+    mesa_str = str(mesa)
+    existente = Ticket.query.filter_by(
+        mesa=mesa_str,
+        estado=EstadoTicket.ABIERTO.value
     ).first()
     if existente:
         return jsonify(existente.serialize()), 200
 
-    t = Ticket(mesa=mesa)
+    t = Ticket(mesa=mesa_str)
     db.session.add(t)
     db.session.commit()
     return jsonify(t.serialize()), 201
@@ -151,12 +152,15 @@ def delete_linea(ticket_id: int, linea_id: int):
     return jsonify(t.serialize()), 200
 
 @tpv_bp.post("/tickets/<int:ticket_id>/cerrar")
-@role_required("ADMIN", "CAMARERO")
-def cerrar_ticket(ticket_id: int):
-    t = Ticket.query.get_or_404(ticket_id)
-    if t.estado != EstadoTicket.ABIERTO.value:
-        return jsonify({"error": "Estado inválido"}), 400
-    t.recalc_total()
-    t.estado = EstadoTicket.CERRADO.value
+@jwt_required()
+def cerrar_ticket(ticket_id):
+    t = Ticket.query.get(ticket_id)
+    if not t:
+        return jsonify({"error": "Ticket no encontrado"}), 404
+    if t.estado == "CERRADO":
+        return jsonify(t.serialize()), 200
+
+    t.estado = "CERRADO"
+    t.closed_at = datetime.utcnow()
     db.session.commit()
     return jsonify(t.serialize()), 200

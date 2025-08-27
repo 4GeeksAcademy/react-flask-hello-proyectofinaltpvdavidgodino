@@ -1,44 +1,41 @@
 // src/api/client.js
-const API_BASE = import.meta.env.VITE_BACKEND_URL; // Debe ser .../api (con /api al final)
+const RAW = import.meta.env.VITE_BACKEND_URL || "";
+// normaliza: sin barra final
+const BASE = RAW.replace(/\/+$/, ""); // ej: https://...-3001.app.github.dev/api
 
-export const getToken   = () => sessionStorage.getItem("token");
-export const setToken   = (t) => sessionStorage.setItem("token", t);
-export const clearToken = () => sessionStorage.removeItem("token");
-
-const headers = () => {
-  const h = { "Content-Type": "application/json" };
-  const t = getToken();
-  if (t) h.Authorization = `Bearer ${t}`;
-  return h;
+// helper: asegura que path empieza con "/"
+const join = (p) => {
+  if (!p) return "";
+  return p.startsWith("/") ? p : `/${p}`;
 };
 
-async function handle(res) {
+async function request(method, path, body) {
+  const url = BASE + join(path); // BASE ya incluye /api; path será p.e. "/auth/login"
+
+  const headers = { "Content-Type": "application/json" };
+
+  // añade token si existe
+  const token = localStorage.getItem("token");
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  // intenta parsear json siempre
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+
   if (!res.ok) {
-    throw await res.json().catch(() => ({ error: res.statusText, status: res.status }));
+    const msg = data?.error || data?.msg || res.statusText || "Request failed";
+    throw new Error(msg);
   }
-  return res.json();
+  return data;
 }
 
-export async function apiPost(path, body) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify(body ?? {}),
-  });
-  return handle(res);
-}
-
-export async function apiGet(path) {
-  const res = await fetch(`${API_BASE}${path}`, { headers: headers() });
-  return handle(res);
-}
-
-export async function apiDelete(path) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "DELETE",
-    headers: headers(),
-  });
-  return handle(res);
-}
-
-export { API_BASE };5
+export const apiGet = (path) => request("GET", path);
+export const apiPost = (path, body) => request("POST", path, body);
+export const apiPatch = (path, body) => request("PATCH", path, body);
+export const apiDelete = (path, body) => request("DELETE", path, body);

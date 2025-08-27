@@ -1,7 +1,7 @@
 // src/front/pages/Tickets.jsx
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { apiGet, clearToken } from "../../api/client";
+import { useNavigate, useLocation } from "react-router-dom";
+import { apiGet } from "../../api/client";
 
 const ESTADOS = [
   { value: "ALL", label: "Todos" },
@@ -19,6 +19,8 @@ function fmtDate(iso) {
 
 export default function Tickets() {
   const nav = useNavigate();
+  const location = useLocation();
+
   const [filtro, setFiltro] = useState("ALL");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -36,12 +38,16 @@ export default function Tickets() {
     }
   }
 
+  // carga inicial + cuando cambia el filtro
   useEffect(() => { load(); }, [filtro]);
 
+  // si venimos de TicketDetail con refresh
   useEffect(() => {
-    const id = setInterval(load, 10000);
-    return () => clearInterval(id);
-  }, [filtro]);
+    if (location.state?.refresh) {
+      load();
+      nav(".", { replace: true, state: {} });
+    }
+  }, [location.state?.refresh]);
 
   return (
     <div style={{ padding: 24, fontFamily: "sans-serif" }}>
@@ -49,8 +55,8 @@ export default function Tickets() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={() => nav("/mesas")}>← Mesas</button>
           <h2 style={{ margin: 0 }}>Tickets</h2>
-          <select value={filtro} onChange={e => setFiltro(e.target.value)}>
-            {ESTADOS.map(opt => (
+          <select value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+            {ESTADOS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
@@ -58,12 +64,6 @@ export default function Tickets() {
             {loading ? "Actualizando..." : "Actualizar"}
           </button>
         </div>
-        <button
-          onClick={() => { clearToken(); nav("/login", { replace: true }); }}
-          style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee", cursor: "pointer" }}
-        >
-          Salir
-        </button>
       </div>
 
       <div style={{ overflowX: "auto" }}>
@@ -86,7 +86,7 @@ export default function Tickets() {
                 </td>
               </tr>
             )}
-            {items.map(t => (
+            {items.map((t) => (
               <tr key={t.id}>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{t.id}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{t.mesa}</td>
