@@ -48,6 +48,12 @@ export default function Tickets() {
       nav(".", { replace: true, state: {} });
     }
   }, [location.state?.refresh]);
+  // refresca al recuperar foco de la pestaña (útil si vuelves de un detalle)
+useEffect(() => {
+  const onFocus = () => load();
+  window.addEventListener("focus", onFocus);
+  return () => window.removeEventListener("focus", onFocus);
+}, [filtro]);
 
   return (
     <div style={{ padding: 24, fontFamily: "sans-serif" }}>
