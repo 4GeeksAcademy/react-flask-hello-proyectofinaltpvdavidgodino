@@ -1,3 +1,4 @@
+# src/api/models/__init__.py
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -8,7 +9,8 @@ from .table import Table
 from .product import Product
 from .order import Order
 from .order_item import OrderItem
-from .tpv import Ticket, LineaTicket, EstadoTicket   # 👈 añadidos
+from .tpv import Ticket, LineaTicket, EstadoTicket
+from .catalog import Categoria, Subcategoria, Producto  
 
 __all__ = [
     "db",
@@ -21,4 +23,7 @@ __all__ = [
     "Ticket",
     "LineaTicket",
     "EstadoTicket",
+    "Categoria",
+    "Subcategoria",
+    "Producto",
 ]

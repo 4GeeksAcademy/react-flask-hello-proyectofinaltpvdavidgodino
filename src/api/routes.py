@@ -8,6 +8,7 @@ from flask_cors import CORS
 from api.auth_routes import auth_bp       # Autenticación y usuarios
 from api.tpv_routes import tpv_bp         # TPV
 
+
 # Blueprint principal de la API
 api = Blueprint("api", __name__)
 CORS(api)
