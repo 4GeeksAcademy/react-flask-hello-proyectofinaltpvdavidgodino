@@ -1,11 +1,11 @@
 // src/front/AuthContext.jsx
-import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [token, setTokenState] = useState(() => localStorage.getItem("token") || "");
-  const [role,  setRoleState]  = useState(() => localStorage.getItem("role")  || ""); // ← NUEVO
+  const [role, setRoleState]   = useState(() => localStorage.getItem("role")  || "");
 
   const setToken = (t) => {
     setTokenState(t || "");
@@ -13,13 +13,18 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem("token");
   };
 
-  const setRole = (r) => {                  // ← NUEVO
+  const setRole = (r) => {
     setRoleState(r || "");
     if (r) localStorage.setItem("role", r);
     else localStorage.removeItem("role");
   };
 
-  // sync entre pestañas
+  const logout = () => {
+    setToken("");
+    setRole("");
+  };
+
+  // Sync entre pestañas (opcional)
   useEffect(() => {
     const onStorage = (e) => {
       if (e.key === "token") setTokenState(e.newValue || "");
@@ -29,7 +34,11 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const value = useMemo(() => ({ token, role, setToken, setRole }), [token, role]);
+  const isAdmin = role === "ADMIN";
+
+  const value = useMemo(() => ({
+    token, role, isAdmin, setToken, setRole, logout
+  }), [token, role]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -3,13 +3,25 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Login from "./pages/Login.jsx";
-import Mesas from "./pages/Mesas.jsx";
 import Tickets from "./pages/Tickets.jsx";
 import TicketDetail from "./pages/TicketDetail.jsx";
-import ProtectedRoute from "./components/ProtectedRoute.jsx";
-
-// 👇 importa el admin
+import Mesas from "./pages/Mesas.jsx";
 import AdminCatalog from "./pages/admin/Catalog.jsx";
+
+import { useAuth } from "./AuthContext";
+
+function RequireAuth({ children }) {
+  const { token } = useAuth();
+  if (!token) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function RequireAdmin({ children }) {
+  const { token, isAdmin } = useAuth();
+  if (!token) return <Navigate to="/login" replace />;
+  if (!isAdmin) return <Navigate to="/mesas" replace />;
+  return children;
+}
 
 export default function AppRoutes() {
   return (
@@ -21,37 +33,35 @@ export default function AppRoutes() {
         <Route
           path="/mesas"
           element={
-            <ProtectedRoute>
+            <RequireAuth>
               <Mesas />
-            </ProtectedRoute>
+            </RequireAuth>
           }
         />
-
         <Route
           path="/tickets"
           element={
-            <ProtectedRoute>
+            <RequireAuth>
               <Tickets />
-            </ProtectedRoute>
+            </RequireAuth>
           }
         />
-
         <Route
           path="/tickets/:id"
           element={
-            <ProtectedRoute>
+            <RequireAuth>
               <TicketDetail />
-            </ProtectedRoute>
+            </RequireAuth>
           }
         />
 
-        {/* Solo ADMIN */}
+        {/* ADMIN ONLY */}
         <Route
           path="/admin/catalog"
           element={
-            <ProtectedRoute allowRoles={["ADMIN"]}>
+            <RequireAdmin>
               <AdminCatalog />
-            </ProtectedRoute>
+            </RequireAdmin>
           }
         />
 

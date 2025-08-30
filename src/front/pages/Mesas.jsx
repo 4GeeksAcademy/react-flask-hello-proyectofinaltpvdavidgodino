@@ -2,23 +2,22 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiGet, apiPost } from "../../api/client";
-import { useAuth } from "../AuthContext";        // ⬅️ añadido
+import { useAuth } from "../AuthContext";
 
 const NUM_MESAS = 30;
 
 export default function Mesas() {
   const nav = useNavigate();
   const location = useLocation();
-  const { setToken } = useAuth();                // ⬅️ añadido
+  const { isAdmin, logout } = useAuth();
 
   const [loading, setLoading] = useState(false);
-  const [byMesa, setByMesa] = useState({}); // { [mesa]: { id, estado, total } }
+  const [byMesa, setByMesa] = useState({});
   const mesas = useMemo(() => Array.from({ length: NUM_MESAS }, (_, i) => i + 1), []);
 
   async function loadTicketsAbiertos() {
     setLoading(true);
     try {
-      // Traemos solo abiertos para pintar estado/total
       const items = await apiGet(`/tpv/tickets?estado=ABIERTO`);
       const map = {};
       for (const t of items) {
@@ -34,10 +33,8 @@ export default function Mesas() {
     }
   }
 
-  // Carga inicial
   useEffect(() => { loadTicketsAbiertos(); }, []);
 
-  // Si volvemos desde TicketDetail con {state:{refresh:true}} -> recargar y limpiar state
   useEffect(() => {
     if (location.state?.refresh) {
       loadTicketsAbiertos();
@@ -46,15 +43,11 @@ export default function Mesas() {
   }, [location.state?.refresh]);
 
   async function handleMesaClick(mesaNum) {
-    const mKey = String(mesaNum);
-    const info = byMesa[mKey];
-
+    const info = byMesa[String(mesaNum)];
     try {
       if (info && info.estado === "ABIERTO") {
-        // Ya hay ticket abierto -> ir a él
         nav(`/tickets/${info.id}`);
       } else {
-        // No hay ticket -> crearlo
         const created = await apiPost(`/tpv/tickets`, { mesa: mesaNum });
         nav(`/tickets/${created.id}`);
       }
@@ -64,31 +57,27 @@ export default function Mesas() {
     }
   }
 
-  // ⬅️ botón salir: borra token y redirige al login
-  function handleLogout() {
-    setToken("");               // limpia localStorage + contexto
-    nav("/login", { replace: true });
-  }
-
   return (
     <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Mesas</h2>
 
         <div style={{ display: "flex", gap: 8 }}>
-          {/* ÚNICO acceso a listado de tickets */}
-          <button
-            onClick={() => nav("/tickets")}
-            style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}
-          >
+          <button onClick={() => nav("/tickets")} style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}>
             Tickets
           </button>
 
-          {/* Salir -> login (cambiar de rol) */}
+          {/* Admin catálogo: visible solo si es admin */}
+          {isAdmin && (
+            <button onClick={() => nav("/admin/catalog")} style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}>
+              Admin catálogo
+            </button>
+          )}
+
+          {/* Salir */}
           <button
-            onClick={handleLogout}
-            style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#f6eaea" }}
-            title="Cerrar sesión y volver al login"
+            onClick={() => { logout(); nav("/login", { replace: true }); }}
+            style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}
           >
             Salir
           </button>
@@ -97,13 +86,7 @@ export default function Mesas() {
 
       {loading && <div style={{ marginBottom: 8 }}>Cargando…</div>}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))",
-          gap: 12,
-        }}
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 12 }}>
         {mesas.map((n) => {
           const m = byMesa[String(n)];
           const abierta = m && m.estado === "ABIERTO";
@@ -124,11 +107,7 @@ export default function Mesas() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 600 }}>Mesa {n}</div>
-              {abierta && (
-                <div style={{ marginTop: 6, fontSize: 14 }}>
-                  {m.total.toFixed(2)} €
-                </div>
-              )}
+              {abierta && <div style={{ marginTop: 6, fontSize: 14 }}>{m.total.toFixed(2)} €</div>}
             </button>
           );
         })}

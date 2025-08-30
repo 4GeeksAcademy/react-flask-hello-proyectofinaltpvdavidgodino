@@ -2,25 +2,27 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
-import { StoreProvider } from "./hooks/useGlobalReducer";
+
 import { BackendURL } from "./components/BackendURL";
 import AppRoutes from "./routes.jsx";
-import { AuthProvider } from "./AuthContext";   // ✅ solo AuthProvider
+
+// ✅ import correcto (mismo directorio)
+import { AuthProvider } from "./AuthContext";
 
 const Main = () => {
-  if (!import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_BACKEND_URL === "")
+  // Si no hay BACKEND_URL configurada, muestra el configurador
+  if (!import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_BACKEND_URL === "") {
     return (
       <React.StrictMode>
         <BackendURL />
       </React.StrictMode>
     );
+  }
 
   return (
     <React.StrictMode>
-      <AuthProvider>     {/* ✅ envuelve todo en AuthProvider */}
-        <StoreProvider>
-          <AppRoutes />
-        </StoreProvider>
+      <AuthProvider>
+        <AppRoutes />
       </AuthProvider>
     </React.StrictMode>
   );
