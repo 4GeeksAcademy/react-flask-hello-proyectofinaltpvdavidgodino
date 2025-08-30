@@ -2,12 +2,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiGet, apiPost } from "../../api/client";
+import { useAuth } from "../AuthContext";        // ⬅️ añadido
 
 const NUM_MESAS = 30;
 
 export default function Mesas() {
   const nav = useNavigate();
   const location = useLocation();
+  const { setToken } = useAuth();                // ⬅️ añadido
 
   const [loading, setLoading] = useState(false);
   const [byMesa, setByMesa] = useState({}); // { [mesa]: { id, estado, total } }
@@ -62,15 +64,35 @@ export default function Mesas() {
     }
   }
 
+  // ⬅️ botón salir: borra token y redirige al login
+  function handleLogout() {
+    setToken("");               // limpia localStorage + contexto
+    nav("/login", { replace: true });
+  }
+
   return (
     <div style={{ padding: 24, fontFamily: "sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Mesas</h2>
 
-        {/* ÚNICO acceso a listado de tickets */}
-        <button onClick={() => nav("/tickets")} style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}>
-          Tickets
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {/* ÚNICO acceso a listado de tickets */}
+          <button
+            onClick={() => nav("/tickets")}
+            style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}
+          >
+            Tickets
+          </button>
+
+          {/* Salir -> login (cambiar de rol) */}
+          <button
+            onClick={handleLogout}
+            style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#f6eaea" }}
+            title="Cerrar sesión y volver al login"
+          >
+            Salir
+          </button>
+        </div>
       </div>
 
       {loading && <div style={{ marginBottom: 8 }}>Cargando…</div>}
@@ -97,7 +119,7 @@ export default function Mesas() {
                 height: 90,
                 borderRadius: 8,
                 border: "1px solid #ccc",
-                background: abierta ? "#e6f0ff" : "#f7f7f7", // un poco más oscuro si abierta
+                background: abierta ? "#e6f0ff" : "#f7f7f7",
                 cursor: "pointer",
               }}
             >

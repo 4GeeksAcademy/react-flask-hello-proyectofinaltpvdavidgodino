@@ -5,6 +5,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [token, setTokenState] = useState(() => localStorage.getItem("token") || "");
+  const [role,  setRoleState]  = useState(() => localStorage.getItem("role")  || ""); // ← NUEVO
 
   const setToken = (t) => {
     setTokenState(t || "");
@@ -12,15 +13,23 @@ export function AuthProvider({ children }) {
     else localStorage.removeItem("token");
   };
 
-  const value = useMemo(() => ({ token, setToken }), [token]);
+  const setRole = (r) => {                  // ← NUEVO
+    setRoleState(r || "");
+    if (r) localStorage.setItem("role", r);
+    else localStorage.removeItem("role");
+  };
 
+  // sync entre pestañas
   useEffect(() => {
     const onStorage = (e) => {
       if (e.key === "token") setTokenState(e.newValue || "");
+      if (e.key === "role")  setRoleState(e.newValue || "");
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  const value = useMemo(() => ({ token, role, setToken, setRole }), [token, role]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

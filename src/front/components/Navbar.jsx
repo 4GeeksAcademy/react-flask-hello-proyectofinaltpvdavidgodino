@@ -1,19 +1,14 @@
+// src/front/components/Navbar.jsx  (o donde tengas la cabecera)
 import { Link } from "react-router-dom";
+import { useAuth } from "../AuthContext";
 
-export const Navbar = () => {
-
-	return (
-		<nav className="navbar navbar-light bg-light">
-			<div className="container">
-				<Link to="/">
-					<span className="navbar-brand mb-0 h1">React Boilerplate</span>
-				</Link>
-				<div className="ml-auto">
-					<Link to="/demo">
-						<button className="btn btn-primary">Check the Context in action</button>
-					</Link>
-				</div>
-			</div>
-		</nav>
-	);
-};
+export default function Navbar() {
+  const { role } = useAuth();
+  return (
+    <nav style={{ padding: 12 }}>
+      <Link to="/mesas">Mesas</Link>{" "}
+      <Link to="/tickets">Tickets</Link>{" "}
+      {role === "ADMIN" && <Link to="/admin/catalog">Catálogo</Link>}
+    </nav>
+  );
+}
