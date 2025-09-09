@@ -1,7 +1,7 @@
 // src/front/pages/admin/Catalog.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiGet, apiPost } from "../../../api/client"; // 👈 ojo a la ruta
+import { apiGet, apiPost } from "../../../api/client"; // 
 
 export default function AdminCatalog() {
   const nav = useNavigate();
