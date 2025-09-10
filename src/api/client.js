@@ -1,32 +1,29 @@
 // src/api/client.js
 const RAW = import.meta.env.VITE_BACKEND_URL || "";
-// normaliza: sin barra final
-const BASE = RAW.replace(/\/+$/, ""); // ej: https://...-3001.app.github.dev/api
+const BASE = RAW.replace(/\/+$/, ""); // quita barras finales
 
-// helper: asegura que path empieza con "/"
-const join = (p) => {
-  if (!p) return "";
-  return p.startsWith("/") ? p : `/${p}`;
-};
+const join = (p) => (p?.startsWith("/") ? p : `/${p || ""}`);
 
 async function request(method, path, body) {
-  const url = BASE + join(path); // BASE ya incluye /api; path será p.e. "/auth/login"
+  // lee token bajo ambas claves, por si el login guardó "access_token"
+  const token =
+    localStorage.getItem("token") || localStorage.getItem("access_token");
 
-  const headers = { "Content-Type": "application/json" };
-
-  // añade token si existe
-  const token = localStorage.getItem("token");
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(url, {
+  const res = await fetch(BASE + join(path), {
     method,
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  // intenta parsear json siempre
   let data = null;
-  try { data = await res.json(); } catch (_) {}
+  try {
+    data = await res.json();
+  } catch (_) {
+    // el backend puede devolver 204 o body vacío
+  }
 
   if (!res.ok) {
     const msg = data?.error || data?.msg || res.statusText || "Request failed";

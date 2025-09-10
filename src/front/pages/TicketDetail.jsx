@@ -1,268 +1,312 @@
+// src/front/pages/TicketDetail.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { apiGet, apiPost } from "../../api/client";
-import NumPad from "../components/NumPad";
+import { useParams, useNavigate } from "react-router-dom";
+import { apiGet, apiPost, apiPatch } from "../../api/client";
+
+const fmtMoney = (n) => Number(n || 0).toFixed(2);
 
 export default function TicketDetail() {
-  const nav = useNavigate();
   const { id } = useParams();
+  const nav = useNavigate();
 
   const [loading, setLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
-
-  // catálogo
+  const [lineas, setLineas] = useState([]);
   const [categorias, setCategorias] = useState([]);
-  const [subcategorias, setSubcategorias] = useState([]);
+  const [subcats, setSubcats] = useState([]);
   const [productos, setProductos] = useState([]);
 
-  // selección / cantidad
-  const [selCat, setSelCat] = useState(null);
-  const [selSub, setSelSub] = useState(null);
-  const [qty, setQty] = useState(1);
+  const [catSel, setCatSel] = useState(null);
+  const [subcatSel, setSubcatSel] = useState(null);
+  const [cantidad, setCantidad] = useState(1);
 
-  const subtotal = useMemo(() => {
-    const lines = ticket?.lineas || [];
-    return lines.reduce((acc, l) => acc + Number(l.precio_unitario || 0) * Number(l.cantidad || 0), 0);
-  }, [ticket]);
+  const total = useMemo(
+    () => lineas.reduce((acc, l) => acc + Number(l.subtotal || 0), 0),
+    [lineas]
+  );
 
-  // ─────────────────── carga ticket + catálogo ───────────────────
   async function loadTicket() {
+    setLoading(true);
     try {
-      setLoading(true);
-      const data = await apiGet(`/tpv/tickets/${id}`);
-      setTicket(data);
+      const t = await apiGet(`/tpv/tickets/${id}`);
+      setTicket(t);
+
+      const ls = await apiGet(`/tpv/tickets/${id}/lineas`);
+      setLineas(Array.isArray(ls) ? ls : []);
+
+      // catálogo POS
+      const cat = await apiGet(`/tpv/catalogo`);
+      const cats = cat?.categorias || [];
+      setCategorias(cats);
+
+      const primera = cats[0] || null;
+      setCatSel(primera?.id || null);
+      setSubcats(primera?.subcategorias || []);
+      setProductos(primera?.productos || []);
+      setSubcatSel(null);
     } catch (e) {
       console.error(e);
-      alert(e?.error || "No se pudo cargar el ticket");
+      alert(e?.message || "No se pudo cargar el ticket");
     } finally {
       setLoading(false);
     }
   }
 
-  async function loadCategorias() {
-    try {
-      // Si no existe todavía el endpoint, esto lanzará error y caerá en catch, pero la UI sigue
-      const data = await apiGet(`/admin/catalogo/categorias`);
-      setCategorias(data || []);
-    } catch {
-      setCategorias([]); // catálogo vacío (placeholder)
-    }
-  }
+  useEffect(() => {
+    loadTicket();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-  async function loadSubcategorias(categoriaId) {
-    setSubcategorias([]);
-    setProductos([]);
-    setSelSub(null);
-    try {
-      const data = await apiGet(`/admin/catalogo/subcategorias?categoria_id=${categoriaId}`);
-      setSubcategorias(data || []);
-    } catch {
-      setSubcategorias([]);
-    }
-  }
-
-  async function loadProductos(subcategoriaId) {
-    setProductos([]);
-    try {
-      const data = await apiGet(`/admin/catalogo/productos?subcategoria_id=${subcategoriaId}`);
-      setProductos(data || []);
-    } catch {
+  useEffect(() => {
+    if (!catSel) {
+      setSubcats([]);
       setProductos([]);
+      setSubcatSel(null);
+      return;
     }
+    const c = categorias.find((c) => c.id === catSel);
+    if (!c) return;
+    setSubcats(c.subcategorias || []);
+    setProductos(c.productos || []);
+    setSubcatSel(null);
+  }, [catSel, categorias]);
+
+  useEffect(() => {
+    if (!subcatSel) return;
+    const c = categorias.find((c) => c.id === catSel);
+    if (!c) return;
+    const sc = (c.subcategorias || []).find((s) => s.id === subcatSel);
+    if (!sc) return;
+    setProductos(sc.productos || []);
+  }, [subcatSel, categorias, catSel]);
+
+  // ───────────── actions ─────────────
+
+  async function reloadLineas() {
+    const ls = await apiGet(`/tpv/tickets/${id}/lineas`);
+    setLineas(Array.isArray(ls) ? ls : []);
   }
 
-  useEffect(() => { loadTicket(); }, [id]);
-  useEffect(() => { loadCategorias(); }, []);
+  // dentro de TicketDetail.jsx
 
-  // ─────────────────── acciones ───────────────────
-  const onSelectCategoria = (cat) => {
-    setSelCat(cat);
-    loadSubcategorias(cat.id);
-  };
+async function handleAddProduct(productId) {
+  try {
+    // el backend devuelve el TICKET entero o la LÍNEA según tu implementación.
+    // Para ser robustos, si viene ticket => refrescamos, si viene línea => la añadimos.
+    const resp = await apiPost(`/tpv/tickets/${id}/lineas`, {
+      producto_id: productId,
+      cantidad: Math.max(1, Number(cantidad || 1)),
+    });
 
-  const onSelectSubcategoria = (sub) => {
-    setSelSub(sub);
-    loadProductos(sub.id);
-  };
+    if (Array.isArray(resp)) {
+      // por si el endpoint devolviera el array de líneas
+      setLineas(resp);
+    } else if (resp && resp.lineas) {
+      // si devolvió el ticket completo
+      setLineas(resp.lineas);
+    } else if (resp && resp.id) {
+      // devolvió UNA línea
+      setLineas((prev) => [...prev, resp]);
+    } else {
+      // fallback: recargar
+      const ls = await apiGet(`/tpv/tickets/${id}/lineas`);
+      setLineas(ls);
+    }
+    setCantidad(1);
+  } catch (e) {
+    console.error(e);
+    alert(e?.message || e?.error || "No se pudo agregar el producto");
+  }
+}
 
-  const addProducto = async (prod) => {
+  async function handleDelLinea(lineaId) {
     try {
-      await apiPost(`/tpv/tickets/${id}/lineas`, { producto_id: prod.id, cantidad: qty });
-      setQty(1);
-      await loadTicket();
+      await apiPatch(`/tpv/tickets/${id}/lineas/${lineaId}`, { accion: "ELIMINAR" });
+      await reloadLineas();
     } catch (e) {
       console.error(e);
-      alert(e?.error || "No se pudo añadir el producto");
+      alert(e?.message || "No se pudo eliminar la línea");
     }
-  };
+  }
 
-  const cerrarTicket = async () => {
+  async function handleCerrarTicket() {
+    if (!window.confirm("¿Cerrar el ticket?")) return;
     try {
-      await apiPost(`/tpv/tickets/${id}/cerrar`, {});
+      await apiPatch(`/tpv/tickets/${id}`, { accion: "CERRAR" });
       nav("/mesas", { replace: true, state: { refresh: true } });
     } catch (e) {
       console.error(e);
-      alert(e?.error || "No se pudo cerrar el ticket");
+      alert(e?.message || "No se pudo cerrar el ticket");
     }
-  };
+  }
 
-  const volverMesas = () => {
+  const handleVolver = () =>
     nav("/mesas", { replace: true, state: { refresh: true } });
+
+  // numpad
+  const pressNum = (n) => {
+    const prev = String(cantidad || "");
+    const next = Number((prev === "0" ? String(n) : prev + String(n)) || "0");
+    setCantidad(next > 999 ? 999 : next);
+  };
+  const pressClr = () => setCantidad(1);
+  const pressBk = () => {
+    const s = String(cantidad);
+    setCantidad(Number(s.length <= 1 ? "1" : s.slice(0, -1)));
   };
 
-  // ─────────────────── UI ───────────────────
   return (
     <div style={{ padding: 16, fontFamily: "sans-serif" }}>
-      {/* Barra superior */}
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button onClick={volverMesas} style={btnSecondary}>← Mesas</button>
-          <h2 style={{ margin: 0 }}>Ticket #{id}</h2>
-          {ticket?.mesa && <span style={{ color: "#666" }}>Mesa {ticket.mesa}</span>}
-          {loading && <span style={{ marginLeft: 8, color: "#666" }}>Cargando…</span>}
+          <button onClick={handleVolver}>← Mesas</button>
+          <h2 style={{ margin: 0 }}>
+            Ticket #{id} {ticket?.mesa ? `· Mesa ${ticket.mesa}` : ""}
+          </h2>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ fontWeight: 600 }}>Subtotal: {subtotal.toFixed(2)} €</div>
-          <button onClick={loadTicket} style={btnSecondary}>⟳ Refrescar</button>
-          <button onClick={cerrarTicket} style={btnDanger}>Cerrar ticket</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>Total: {fmtMoney(total)} €</div>
+          <button onClick={handleCerrarTicket} style={{ background: "#222", color: "white", padding: "8px 12px", borderRadius: 6 }}>
+            Cerrar ticket
+          </button>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16 }}>
-        {/* Columna izquierda: Qty + catálogo */}
-        <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16 }}>
-          {/* Teclado cantidad */}
-          <div>
-            <div style={{ marginBottom: 8, fontWeight: 600 }}>Cantidad</div>
-            <NumPad value={qty} onChange={setQty} onAdd={() => { /* noop, se usa al pulsar producto */ }} />
-            <div style={{ marginTop: 8, color: "#666" }}>Toca un producto para añadir con la cantidad indicada.</div>
+      {loading && <div style={{ marginBottom: 8 }}>Cargando…</div>}
+
+      {/* 3 columnas: numpad / categorías / líneas */}
+      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 380px", gap: 12 }}>
+        {/* Numpad */}
+        <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <div style={{ marginBottom: 8, fontWeight: 600 }}>Cantidad</div>
+          <div style={{ border: "1px solid #ccc", borderRadius: 6, padding: "12px 8px", fontSize: 24, textAlign: "right", marginBottom: 12 }}>
+            {cantidad}
           </div>
-
-          {/* Catálogo */}
-          <div>
-            <div style={{ marginBottom: 6, fontWeight: 600 }}>Categorías</div>
-            <div style={gridWrap}>
-              {categorias.length === 0 && <div style={muted}>(catálogo vacío)</div>}
-              {categorias.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => onSelectCategoria(c)}
-                  style={{ ...pill, background: selCat?.id === c.id ? "#e6f0ff" : "#f7f7f7" }}
-                >
-                  {c.nombre}
-                </button>
-              ))}
-            </div>
-
-            {selCat && (
-              <>
-                <div style={{ margin: "12px 0 6px", fontWeight: 600 }}>
-                  Subcategorías · <span style={{ color: "#666" }}>{selCat.nombre}</span>
-                </div>
-                <div style={gridWrap}>
-                  {subcategorias.length === 0 && <div style={muted}>(sin subcategorías)</div>}
-                  {subcategorias.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => onSelectSubcategoria(s)}
-                      style={{ ...pill, background: selSub?.id === s.id ? "#e6f0ff" : "#f7f7f7" }}
-                    >
-                      {s.nombre}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {selSub && (
-              <>
-                <div style={{ margin: "12px 0 6px", fontWeight: 600 }}>
-                  Productos · <span style={{ color: "#666" }}>{selSub.nombre}</span>
-                </div>
-                <div style={gridWrap}>
-                  {productos.length === 0 && <div style={muted}>(sin productos)</div>}
-                  {productos.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => addProducto(p)}
-                      style={{ ...cardBtn }}
-                      title={`Añadir x${qty}`}
-                    >
-                      <div style={{ fontWeight: 600 }}>{p.nombre}</div>
-                      <div style={{ fontSize: 13, color: "#555" }}>{Number(p.precio).toFixed(2)} €</div>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            {[1,2,3,4,5,6,7,8,9].map((n) => (
+              <button key={n} onClick={() => pressNum(n)} style={{ padding: "12px 0" }}>{n}</button>
+            ))}
+            <button onClick={pressBk}>←</button>
+            <button onClick={() => pressNum(0)}>0</button>
+            <button onClick={pressClr}>CLR</button>
           </div>
         </div>
 
-        {/* Columna derecha: líneas del ticket */}
-        <div>
-          <div style={{ marginBottom: 8, fontWeight: 600 }}>Líneas</div>
-          <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 8, minHeight: 280 }}>
-            {(ticket?.lineas || []).length === 0 && (
-              <div style={muted}>Sin líneas todavía.</div>
-            )}
-            {(ticket?.lineas || []).map((l) => (
-              <div key={l.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 4px", borderBottom: "1px solid #f3f3f3" }}>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <div style={{ width: 28, textAlign: "right" }}>x{l.cantidad}</div>
-                  <div>{l.producto_nombre || l.producto?.nombre || "Producto"}</div>
-                </div>
-                <div style={{ fontVariantNumeric: "tabular-nums" }}>
-                  {(Number(l.precio_unitario) * Number(l.cantidad)).toFixed(2)} €
-                </div>
+        {/* Categorías / Subcategorías / Productos */}
+        <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          {/* Categorías */}
+          <div style={{ marginBottom: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {categorias.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setCatSel(c.id)}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  border: "1px solid #aaa",
+                  background: c.id === catSel ? "#e6f0ff" : "#f7f7f7",
+                }}
+              >
+                {c.nombre}
+              </button>
+            ))}
+          </div>
+
+          {/* Subcategorías */}
+          {subcats?.length > 0 && (
+            <div style={{ marginBottom: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {subcats.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSubcatSel(s.id)}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    border: "1px solid #ccc",
+                    background: s.id === subcatSel ? "#e6f0ff" : "#fff",
+                  }}
+                >
+                  {s.nombre}
+                </button>
+              ))}
+              {subcatSel && (
+                <button
+                  onClick={() => {
+                    setSubcatSel(null);
+                    const c = categorias.find((x) => x.id === catSel);
+                    setProductos(c?.productos || []);
+                  }}
+                  style={{ padding: "6px 10px", borderRadius: 6 }}
+                >
+                  Ver productos de categoría
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Productos */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, alignContent: "start" }}>
+            {productos?.length === 0 && <div style={{ color: "#777" }}>No hay productos para esta selección</div>}
+            {productos?.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => handleAddProduct(p.id)}
+                style={{
+                  height: 64,
+                  border: "1px solid #ccc",
+                  borderRadius: 8,
+                  background: "#fafafa",
+                  padding: 8,
+                  textAlign: "left",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>{p.nombre}</div>
+                <div style={{ fontSize: 13 }}>{fmtMoney(p.precio)} €</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Líneas */}
+        <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Líneas</div>
+          <div style={{ maxHeight: 440, overflowY: "auto" }}>
+            {lineas.length === 0 && <div style={{ color: "#777" }}>No hay líneas</div>}
+            {lineas.map((l) => (
+              <div key={l.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 70px 70px 28px",
+                  gap: 8,
+                  alignItems: "center",
+                  borderBottom: "1px solid #eee",
+                  padding: "8px 0",
+                }}
+              >
+                <div>{l.nombre || l.producto_nombre || `#${l.producto_id}`}</div>
+                <div style={{ textAlign: "right" }}>x{l.cantidad}</div>
+                <div style={{ textAlign: "right" }}>{fmtMoney(l.subtotal)} €</div>
+                <button
+                  onClick={() => handleDelLinea(l.id)}
+                  title="Eliminar línea"
+                  style={{ border: "1px solid #ddd", borderRadius: 6 }}
+                >
+                  ⓧ
+                </button>
               </div>
             ))}
-            <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, marginTop: 8 }}>
-              <div style={{ fontWeight: 600 }}>Subtotal</div>
-              <div style={{ fontWeight: 600 }}>{subtotal.toFixed(2)} €</div>
-            </div>
+          </div>
+
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", fontWeight: 600 }}>
+            <div>Total</div>
+            <div>{fmtMoney(total)} €</div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-// ───────────── estilos inline mínimos ─────────────
-const btnSecondary = {
-  padding: "8px 12px",
-  border: "1px solid #333",
-  borderRadius: 6,
-  background: "#eee",
-  cursor: "pointer"
-};
-const btnDanger = {
-  padding: "8px 12px",
-  border: "1px solid #a33",
-  borderRadius: 6,
-  background: "#f8d7da",
-  cursor: "pointer"
-};
-const gridWrap = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-  gap: 8
-};
-const pill = {
-  padding: "10px 12px",
-  border: "1px solid #ccc",
-  borderRadius: 6,
-  cursor: "pointer",
-  textAlign: "center"
-};
-const cardBtn = {
-  padding: 12,
-  border: "1px solid #ccc",
-  borderRadius: 8,
-  background: "#fff",
-  textAlign: "left",
-  cursor: "pointer",
-  display: "flex",
-  flexDirection: "column",
-  gap: 4
-};
-const muted = { color: "#777", fontSize: 13 };

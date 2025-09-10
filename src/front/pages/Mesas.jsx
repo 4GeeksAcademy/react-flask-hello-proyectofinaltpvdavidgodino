@@ -2,17 +2,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiGet, apiPost } from "../../api/client";
-import { useAuth } from "../AuthContext";
 
 const NUM_MESAS = 30;
 
 export default function Mesas() {
   const nav = useNavigate();
   const location = useLocation();
-  const { isAdmin, logout } = useAuth();
 
   const [loading, setLoading] = useState(false);
-  const [byMesa, setByMesa] = useState({});
+  const [byMesa, setByMesa] = useState({}); // { [mesa]: { id, estado, total } }
+  const [isAdmin, setIsAdmin] = useState(false);
   const mesas = useMemo(() => Array.from({ length: NUM_MESAS }, (_, i) => i + 1), []);
 
   async function loadTicketsAbiertos() {
@@ -20,21 +19,32 @@ export default function Mesas() {
     try {
       const items = await apiGet(`/tpv/tickets?estado=ABIERTO`);
       const map = {};
-      for (const t of items) {
+      for (const t of items || []) {
         const m = String(t.mesa);
         if (!map[m]) map[m] = { id: t.id, estado: t.estado, total: Number(t.total || 0) };
       }
       setByMesa(map);
     } catch (e) {
       console.error(e);
-      alert(e?.error || "No se pudieron cargar las mesas");
+      alert(e?.message || e?.error || "No se pudieron cargar las mesas");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { loadTicketsAbiertos(); }, []);
+  async function loadRole() {
+    try {
+      const me = await apiGet(`/auth/me`);
+      setIsAdmin(me?.role === "ADMIN");
+    } catch {
+      setIsAdmin(false);
+    }
+  }
 
+  // Carga inicial
+  useEffect(() => { loadTicketsAbiertos(); loadRole(); }, []);
+
+  // Si volvemos desde TicketDetail con {state:{refresh:true}} -> recargar y limpiar state
   useEffect(() => {
     if (location.state?.refresh) {
       loadTicketsAbiertos();
@@ -53,40 +63,41 @@ export default function Mesas() {
       }
     } catch (e) {
       console.error(e);
-      alert(e?.error || "No se pudo abrir/crear ticket");
+      alert(e?.message || e?.error || "No se pudo abrir/crear ticket");
     }
+  }
+
+  function handleSalir() {
+    localStorage.removeItem("token");
+    nav("/login", { replace: true });
   }
 
   return (
     <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      {/* header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <h2 style={{ margin: 0 }}>Mesas</h2>
-
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => nav("/tickets")} style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}>
-            Tickets
-          </button>
-
-          {/* Admin catálogo: visible solo si es admin */}
+          <button onClick={() => nav("/tickets")}>Tickets</button>
           {isAdmin && (
-            <button onClick={() => nav("/admin/catalog")} style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}>
-              Admin catálogo
+            <button onClick={() => nav("/admin/catalog")}>
+              Catálogo
             </button>
           )}
-
-          {/* Salir */}
-          <button
-            onClick={() => { logout(); nav("/login", { replace: true }); }}
-            style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}
-          >
-            Salir
-          </button>
+          <button onClick={handleSalir}>Salir</button>
         </div>
       </div>
 
       {loading && <div style={{ marginBottom: 8 }}>Cargando…</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 12 }}>
+      {/* grid 3 x 10 como antes, pero responsivo */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(10, minmax(110px, 1fr))",
+          gap: 12,
+        }}
+      >
         {mesas.map((n) => {
           const m = byMesa[String(n)];
           const abierta = m && m.estado === "ABIERTO";
@@ -107,7 +118,11 @@ export default function Mesas() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 600 }}>Mesa {n}</div>
-              {abierta && <div style={{ marginTop: 6, fontSize: 14 }}>{m.total.toFixed(2)} €</div>}
+              {abierta && (
+                <div style={{ marginTop: 6, fontSize: 14 }}>
+                  {Number(m.total || 0).toFixed(2)} €
+                </div>
+              )}
             </button>
           );
         })}

@@ -15,9 +15,9 @@ export default function Login() {
     e.preventDefault();
     setError("");
     try {
-      const data  = await apiPost("/auth/login", { email, password });
+      const data = await apiPost("/auth/login", { email, password });
       const token = data?.access_token;
-      const role  = data?.role;
+      const role = data?.role;
 
       if (!token || !role) {
         setError("URL is not valid or contains user credentials.");
