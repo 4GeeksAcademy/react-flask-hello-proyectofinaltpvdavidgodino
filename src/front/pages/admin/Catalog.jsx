@@ -1,30 +1,39 @@
 // src/front/pages/admin/Catalog.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiGet, apiPost } from "../../../api/client.js";
+import { apiGet, apiPost, apiPatch, apiDelete } from "../../../api/client";
+
+function Section({ title, children }) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>{title}</div>
+      <div
+        style={{
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          padding: 12,
+          background: "#fff",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminCatalog() {
   const nav = useNavigate();
 
   const [loading, setLoading] = useState(false);
-  const [categorias, setCategorias] = useState([]);
-  const [catNombre, setCatNombre] = useState("");
-  const [catDesc, setCatDesc] = useState("");
+  const [cats, setCats] = useState([]);
+  const [newCat, setNewCat] = useState("");
 
-  // Cargar categorías al entrar
-  async function loadCategorias() {
+  async function load() {
     setLoading(true);
     try {
+      // GET /api/admin/catalogo/categorias
       const data = await apiGet("/admin/catalogo/categorias");
-      // Normaliza por si el backend devuelve distinto casing
-      setCategorias(
-        (Array.isArray(data) ? data : []).map((c) => ({
-          id: c.id,
-          nombre: c.nombre,
-          descripcion: c.descripcion || "",
-          created_at: c.created_at,
-        }))
-      );
+      setCats(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
       alert(e?.error || "No se pudieron cargar las categorías");
@@ -33,90 +42,217 @@ export default function AdminCatalog() {
     }
   }
 
-  useEffect(() => { loadCategorias(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
-  // Crear categoría
-  async function onCrearCategoria(e) {
-    e.preventDefault();
-    if (!catNombre.trim()) {
-      alert("Introduce un nombre de categoría");
-      return;
-    }
+  async function createCategory(e) {
+    e?.preventDefault?.();
+    const nombre = newCat.trim();
+    if (!nombre) return;
+
     try {
-      await apiPost("/admin/catalogo/categorias", {
-        nombre: catNombre.trim(),
-        descripcion: catDesc.trim() || ""
-      });
-      setCatNombre("");
-      setCatDesc("");
-      await loadCategorias(); // ← refrescamos lista tras crear
+      // POST /api/admin/catalogo/categorias { nombre }
+      const created = await apiPost("/admin/catalogo/categorias", { nombre });
+      setCats((prev) => [...prev, created]);
+      setNewCat("");
     } catch (e) {
       console.error(e);
       alert(e?.error || "No se pudo crear la categoría");
     }
   }
 
+  async function renameCategory(catId, oldName) {
+    const nombre = prompt("Nuevo nombre para la categoría:", oldName || "");
+    if (nombre == null) return; // cancelado
+    const trimmed = nombre.trim();
+    if (!trimmed || trimmed === oldName) return;
+
+    try {
+      // PATCH /api/admin/catalogo/categorias/:id { nombre }
+      const updated = await apiPatch(`/admin/catalogo/categorias/${catId}`, {
+        nombre: trimmed,
+      });
+      setCats((prev) =>
+        prev.map((c) => (c.id === catId ? { ...c, ...updated } : c))
+      );
+    } catch (e) {
+      console.error(e);
+      alert(e?.error || "No se pudo renombrar la categoría");
+    }
+  }
+
+  async function deleteCategory(catId) {
+    if (!confirm("¿Eliminar esta categoría? Esta acción no se puede deshacer.")) {
+      return;
+    }
+    try {
+      // DELETE /api/admin/catalogo/categorias/:id
+      await apiDelete(`/admin/catalogo/categorias/${catId}`);
+      setCats((prev) => prev.filter((c) => c.id !== catId));
+    } catch (e) {
+      console.error(e);
+      alert(
+        e?.error ||
+          "No se pudo eliminar la categoría (puede tener subcategorías o productos)."
+      );
+    }
+  }
+
   return (
-    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <button onClick={() => nav("/mesas")}>← Mesas</button>
-        <h1 style={{ margin: 0 }}>Catálogo (Admin)</h1>
+    <div style={{ padding: 24, fontFamily: "sans-serif", maxWidth: 900 }}>
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          marginBottom: 16,
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            onClick={() => nav("/mesas")}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #333",
+              borderRadius: 6,
+              background: "#eee",
+              cursor: "pointer",
+            }}
+          >
+            ← Mesas
+          </button>
+          <h1 style={{ margin: 0 }}>Catálogo (Admin)</h1>
+        </div>
+        <button
+          onClick={load}
+          disabled={loading}
+          style={{
+            padding: "8px 12px",
+            border: "1px solid #333",
+            borderRadius: 6,
+            background: "#eee",
+            cursor: "pointer",
+          }}
+        >
+          {loading ? "Actualizando..." : "Actualizar"}
+        </button>
       </div>
 
-      <section style={{ marginBottom: 24 }}>
-        <h2 style={{ marginBottom: 8 }}>Categorías</h2>
-
-        <form onSubmit={onCrearCategoria} style={{ display: "grid", gap: 8, maxWidth: 420, marginBottom: 16 }}>
+      {/* Categorías */}
+      <Section title="Categorías">
+        <form
+          onSubmit={createCategory}
+          style={{ display: "flex", gap: 8, marginBottom: 12 }}
+        >
           <input
-            placeholder="Nombre de la categoría"
-            value={catNombre}
-            onChange={(e) => setCatNombre(e.target.value)}
+            type="text"
+            placeholder="Nombre de categoría"
+            value={newCat}
+            onChange={(e) => setNewCat(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "8px 10px",
+              border: "1px solid #ccc",
+              borderRadius: 6,
+            }}
           />
-          <input
-            placeholder="Descripción (opcional)"
-            value={catDesc}
-            onChange={(e) => setCatDesc(e.target.value)}
-          />
-          <div>
-            <button type="submit" disabled={loading}>
-              {loading ? "Guardando..." : "Añadir categoría"}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading || !newCat.trim()}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #333",
+              borderRadius: 6,
+              background: "#e6f0ff",
+              cursor: "pointer",
+            }}
+          >
+            + Categoría
+          </button>
         </form>
 
-        {/* listado simple para verificar persistencia */}
-        <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, padding: 12 }}>
-          {loading && categorias.length === 0 ? (
-            <div>Cargando…</div>
-          ) : categorias.length === 0 ? (
-            <div style={{ color: "#666" }}>No hay categorías todavía.</div>
-          ) : (
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {categorias.map((c) => (
-                <li key={c.id} style={{ margin: "6px 0" }}>
-                  <strong>{c.nombre}</strong>
-                  {c.descripcion ? <span> — {c.descripcion}</span> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
+        {cats.length === 0 ? (
+          <div style={{ color: "#666" }}>
+            No hay categorías todavía.
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+            }}
+          >
+            {cats.map((c) => (
+              <div
+                key={c.id}
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: 8,
+                  padding: 10,
+                  background: "#fafafa",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>{c.nombre}</div>
 
-      {/* Placeholders para siguientes pasos: subcategorías y productos */}
-      <section style={{ marginBottom: 24 }}>
-        <h2 style={{ marginBottom: 8 }}>Subcategorías</h2>
-        <div style={{ color: "#666" }}>
-          Próximo paso: seleccionar categoría y gestionar sus subcategorías aquí.
-        </div>
-      </section>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button
+                    onClick={() => renameCategory(c.id, c.nombre)}
+                    style={{
+                      padding: "6px 10px",
+                      border: "1px solid #333",
+                      borderRadius: 6,
+                      background: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Renombrar
+                  </button>
+                  <button
+                    onClick={() => deleteCategory(c.id)}
+                    style={{
+                      padding: "6px 10px",
+                      border: "1px solid #c33",
+                      borderRadius: 6,
+                      background: "#ffecec",
+                      color: "#a00",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Eliminar
+                  </button>
+                </div>
 
-      <section>
-        <h2 style={{ marginBottom: 8 }}>Productos</h2>
+                {/* Placeholder para subcategorías / productos (siguiente fase) */}
+                <div style={{ fontSize: 12, color: "#888" }}>
+                  (Aquí mostraremos subcategorías y productos)
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* Placeholders de próximas secciones */}
+      <Section title="Subcategorías (próxima fase)">
         <div style={{ color: "#666" }}>
-          Próximo paso: productos por subcategoría + PricePad (solo admin).
+          Primero cerremos el CRUD de categorías. Luego añadimos subcategorías con
+          selección de categoría padre y su propio CRUD.
         </div>
-      </section>
+      </Section>
+
+      <Section title="Productos (próxima fase)">
+        <div style={{ color: "#666" }}>
+          Tras subcategorías, añadiremos productos con PricePad (solo admin) y
+          se vincularán a la subcategoría.
+        </div>
+      </Section>
     </div>
   );
 }
