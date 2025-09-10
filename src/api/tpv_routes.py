@@ -60,8 +60,8 @@ def add_linea(tid):
 
     linea = LineaTicket(
         ticket_id=ticket.id,
-        producto_id=prod.id,          
-        nombre=prod.nombre,           
+        producto_id=prod.id,        # permite producto con o sin subcategoría
+        nombre=prod.nombre,
         cantidad=cantidad,
         precio_unitario=precio_unit,
         subtotal=subtotal,
@@ -69,6 +69,7 @@ def add_linea(tid):
     )
     db.session.add(linea)
 
+    # Actualiza total del ticket
     db.session.flush()
     total = db.session.query(db.func.coalesce(db.func.sum(LineaTicket.subtotal), 0))\
         .filter(LineaTicket.ticket_id == ticket.id).scalar() or 0
@@ -76,5 +77,5 @@ def add_linea(tid):
 
     db.session.commit()
 
-    db.session.refresh(ticket)
-    return jsonify(ser_ticket(ticket)), 201
+    # Devuelve SOLO la línea creada (para que el front la agregue sin re-render completo)
+    return jsonify(ser_linea(linea)), 201

@@ -3,7 +3,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiGet, apiPost, apiPatch } from "../../api/client";
 
-const fmtMoney = (n) => Number(n || 0).toFixed(2);
+function fmtMoney(n) {
+  const x = Number(n || 0);
+  return x.toFixed(2);
+}
 
 export default function TicketDetail() {
   const { id } = useParams();
@@ -18,12 +21,13 @@ export default function TicketDetail() {
 
   const [catSel, setCatSel] = useState(null);
   const [subcatSel, setSubcatSel] = useState(null);
+
+  // Numpad / cantidad para el próximo producto
   const [cantidad, setCantidad] = useState(1);
 
-  const total = useMemo(
-    () => lineas.reduce((acc, l) => acc + Number(l.subtotal || 0), 0),
-    [lineas]
-  );
+  const total = useMemo(() => {
+    return lineas.reduce((acc, l) => acc + Number(l.subtotal || 0), 0);
+  }, [lineas]);
 
   async function loadTicket() {
     setLoading(true);
@@ -32,21 +36,29 @@ export default function TicketDetail() {
       setTicket(t);
 
       const ls = await apiGet(`/tpv/tickets/${id}/lineas`);
-      setLineas(Array.isArray(ls) ? ls : []);
+      setLineas(ls || []);
 
-      // catálogo POS
+      // CATALOGO TPV (categorías + subcategorías + productos)
       const cat = await apiGet(`/tpv/catalogo`);
       const cats = cat?.categorias || [];
       setCategorias(cats);
 
+      // Inicializa selección (permite productos directos sin subcategoría)
       const primera = cats[0] || null;
-      setCatSel(primera?.id || null);
-      setSubcats(primera?.subcategorias || []);
-      setProductos(primera?.productos || []);
-      setSubcatSel(null);
+      if (primera) {
+        setCatSel(primera.id);
+        setSubcats(primera.subcategorias || []);
+        setProductos(primera.productos || []); // <— productos directos de categoría
+        setSubcatSel(null);
+      } else {
+        setCatSel(null);
+        setSubcats([]);
+        setProductos([]);
+        setSubcatSel(null);
+      }
     } catch (e) {
       console.error(e);
-      alert(e?.message || "No se pudo cargar el ticket");
+      alert(e?.error || "No se pudo cargar el ticket");
     } finally {
       setLoading(false);
     }
@@ -57,6 +69,7 @@ export default function TicketDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Cuando cambia la categoría seleccionada, refrescamos subcats/productos
   useEffect(() => {
     if (!catSel) {
       setSubcats([]);
@@ -67,10 +80,11 @@ export default function TicketDetail() {
     const c = categorias.find((c) => c.id === catSel);
     if (!c) return;
     setSubcats(c.subcategorias || []);
-    setProductos(c.productos || []);
+    setProductos(c.productos || []); // <— productos directos de categoría
     setSubcatSel(null);
   }, [catSel, categorias]);
 
+  // Cuando cambia la subcategoría, refrescamos productos
   useEffect(() => {
     if (!subcatSel) return;
     const c = categorias.find((c) => c.id === catSel);
@@ -80,52 +94,42 @@ export default function TicketDetail() {
     setProductos(sc.productos || []);
   }, [subcatSel, categorias, catSel]);
 
-  // ───────────── actions ─────────────
+  // ─────────────────────────────
+  // Actions
+  // ─────────────────────────────
 
-  async function reloadLineas() {
-    const ls = await apiGet(`/tpv/tickets/${id}/lineas`);
-    setLineas(Array.isArray(ls) ? ls : []);
-  }
+  async function handleAddProduct(productId) {
+    try {
+      const resp = await apiPost(`/tpv/tickets/${id}/lineas`, {
+        producto_id: productId,
+        cantidad: Math.max(1, Number(cantidad || 1)),
+      });
 
-  // dentro de TicketDetail.jsx
+      // Backend NUEVO devuelve la LÍNEA creada
+      if (resp && resp.id && resp.ticket_id) {
+        setLineas((prev) => [...prev, resp]);
+      }
+      // (Compat) si por algún motivo devuelve el ticket completo con lineas
+      else if (resp && resp.lineas) {
+        setLineas(resp.lineas || []);
+      }
 
-async function handleAddProduct(productId) {
-  try {
-    // el backend devuelve el TICKET entero o la LÍNEA según tu implementación.
-    // Para ser robustos, si viene ticket => refrescamos, si viene línea => la añadimos.
-    const resp = await apiPost(`/tpv/tickets/${id}/lineas`, {
-      producto_id: productId,
-      cantidad: Math.max(1, Number(cantidad || 1)),
-    });
-
-    if (Array.isArray(resp)) {
-      // por si el endpoint devolviera el array de líneas
-      setLineas(resp);
-    } else if (resp && resp.lineas) {
-      // si devolvió el ticket completo
-      setLineas(resp.lineas);
-    } else if (resp && resp.id) {
-      // devolvió UNA línea
-      setLineas((prev) => [...prev, resp]);
-    } else {
-      // fallback: recargar
-      const ls = await apiGet(`/tpv/tickets/${id}/lineas`);
-      setLineas(ls);
+      setCantidad(1);
+    } catch (e) {
+      console.error(e);
+      alert(e?.error || "No se pudo agregar el producto");
     }
-    setCantidad(1);
-  } catch (e) {
-    console.error(e);
-    alert(e?.message || e?.error || "No se pudo agregar el producto");
   }
-}
 
   async function handleDelLinea(lineaId) {
     try {
-      await apiPatch(`/tpv/tickets/${id}/lineas/${lineaId}`, { accion: "ELIMINAR" });
-      await reloadLineas();
+      await apiPatch(`/tpv/tickets/${id}/lineas/${lineaId}`, {
+        accion: "ELIMINAR",
+      });
+      setLineas((prev) => prev.filter((l) => l.id !== lineaId));
     } catch (e) {
       console.error(e);
-      alert(e?.message || "No se pudo eliminar la línea");
+      alert(e?.error || "No se pudo eliminar la línea");
     }
   }
 
@@ -136,24 +140,28 @@ async function handleAddProduct(productId) {
       nav("/mesas", { replace: true, state: { refresh: true } });
     } catch (e) {
       console.error(e);
-      alert(e?.message || "No se pudo cerrar el ticket");
+      alert(e?.error || "No se pudo cerrar el ticket");
     }
   }
 
-  const handleVolver = () =>
+  function handleVolver() {
     nav("/mesas", { replace: true, state: { refresh: true } });
+  }
 
-  // numpad
-  const pressNum = (n) => {
+  // Numpad handlers
+  function pressNum(n) {
     const prev = String(cantidad || "");
     const next = Number((prev === "0" ? String(n) : prev + String(n)) || "0");
     setCantidad(next > 999 ? 999 : next);
-  };
-  const pressClr = () => setCantidad(1);
-  const pressBk = () => {
+  }
+  function pressClr() {
+    setCantidad(1);
+  }
+  function pressBk() {
     const s = String(cantidad);
-    setCantidad(Number(s.length <= 1 ? "1" : s.slice(0, -1)));
-  };
+    const trimmed = s.length <= 1 ? "1" : s.slice(0, -1);
+    setCantidad(Number(trimmed));
+  }
 
   return (
     <div style={{ padding: 16, fontFamily: "sans-serif" }}>
@@ -177,15 +185,27 @@ async function handleAddProduct(productId) {
 
       {/* 3 columnas: numpad / categorías / líneas */}
       <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 380px", gap: 12 }}>
-        {/* Numpad */}
+        {/* Columna 1: Numpad + cantidad */}
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Cantidad</div>
-          <div style={{ border: "1px solid #ccc", borderRadius: 6, padding: "12px 8px", fontSize: 24, textAlign: "right", marginBottom: 12 }}>
+          <div
+            style={{
+              border: "1px solid #ccc",
+              borderRadius: 6,
+              padding: "12px 8px",
+              fontSize: 24,
+              textAlign: "right",
+              marginBottom: 12,
+            }}
+          >
             {cantidad}
           </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-            {[1,2,3,4,5,6,7,8,9].map((n) => (
-              <button key={n} onClick={() => pressNum(n)} style={{ padding: "12px 0" }}>{n}</button>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+              <button key={n} onClick={() => pressNum(n)} style={{ padding: "12px 0" }}>
+                {n}
+              </button>
             ))}
             <button onClick={pressBk}>←</button>
             <button onClick={() => pressNum(0)}>0</button>
@@ -193,7 +213,7 @@ async function handleAddProduct(productId) {
           </div>
         </div>
 
-        {/* Categorías / Subcategorías / Productos */}
+        {/* Columna 2: Categorías / Subcategorías / Productos */}
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
           {/* Categorías */}
           <div style={{ marginBottom: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -213,7 +233,7 @@ async function handleAddProduct(productId) {
             ))}
           </div>
 
-          {/* Subcategorías */}
+          {/* Subcategorías (si las hay) */}
           {subcats?.length > 0 && (
             <div style={{ marginBottom: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
               {subcats.map((s) => (
@@ -233,6 +253,7 @@ async function handleAddProduct(productId) {
               {subcatSel && (
                 <button
                   onClick={() => {
+                    // volver a ver productos de la categoría
                     setSubcatSel(null);
                     const c = categorias.find((x) => x.id === catSel);
                     setProductos(c?.productos || []);
@@ -246,8 +267,17 @@ async function handleAddProduct(productId) {
           )}
 
           {/* Productos */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, alignContent: "start" }}>
-            {productos?.length === 0 && <div style={{ color: "#777" }}>No hay productos para esta selección</div>}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+              gap: 8,
+              alignContent: "start",
+            }}
+          >
+            {productos?.length === 0 && (
+              <div style={{ color: "#777" }}>No hay productos para esta selección</div>
+            )}
             {productos?.map((p) => (
               <button
                 key={p.id}
@@ -271,13 +301,14 @@ async function handleAddProduct(productId) {
           </div>
         </div>
 
-        {/* Líneas */}
+        {/* Columna 3: Líneas del ticket */}
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Líneas</div>
           <div style={{ maxHeight: 440, overflowY: "auto" }}>
             {lineas.length === 0 && <div style={{ color: "#777" }}>No hay líneas</div>}
             {lineas.map((l) => (
-              <div key={l.id}
+              <div
+                key={l.id}
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 70px 70px 28px",
@@ -287,7 +318,7 @@ async function handleAddProduct(productId) {
                   padding: "8px 0",
                 }}
               >
-                <div>{l.nombre || l.producto_nombre || `#${l.producto_id}`}</div>
+                <div>{l.nombre || `#${l.producto_id}`}</div>
                 <div style={{ textAlign: "right" }}>x{l.cantidad}</div>
                 <div style={{ textAlign: "right" }}>{fmtMoney(l.subtotal)} €</div>
                 <button
