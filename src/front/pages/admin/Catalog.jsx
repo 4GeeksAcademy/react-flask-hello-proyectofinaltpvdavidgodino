@@ -1,187 +1,122 @@
 // src/front/pages/admin/Catalog.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiGet, apiPost } from "../../../api/client"; // 
+import { apiGet, apiPost } from "../../../api/client.js";
 
 export default function AdminCatalog() {
   const nav = useNavigate();
 
-  // árbol completo
-  const [tree, setTree] = useState([]);
-  // selección actual (para añadir subcategorías o productos)
-  const [selectedCat, setSelectedCat] = useState(null);
-  const [selectedSub, setSelectedSub] = useState(null);
-
   const [loading, setLoading] = useState(false);
+  const [categorias, setCategorias] = useState([]);
+  const [catNombre, setCatNombre] = useState("");
+  const [catDesc, setCatDesc] = useState("");
 
-  async function loadTree() {
+  // Cargar categorías al entrar
+  async function loadCategorias() {
     setLoading(true);
     try {
-      // Endpoint de lectura del árbol (usa el que montamos en el back)
-      // Si en tu back el nombre es distinto, cámbialo aquí.
-      // Opción A (la que te dejé en admin_catalog_routes): /api/admin/catalogo/tree
-      // Opción B fallback: /api/admin/catalogo/arbol
-      let data;
-      try {
-        data = await apiGet("/admin/catalogo/tree");
-      } catch {
-        data = await apiGet("/admin/catalogo/arbol");
-      }
-      setTree(Array.isArray(data) ? data : []);
+      const data = await apiGet("/admin/catalogo/categorias");
+      // Normaliza por si el backend devuelve distinto casing
+      setCategorias(
+        (Array.isArray(data) ? data : []).map((c) => ({
+          id: c.id,
+          nombre: c.nombre,
+          descripcion: c.descripcion || "",
+          created_at: c.created_at,
+        }))
+      );
     } catch (e) {
-      alert(e?.error || "No se pudo cargar el catálogo");
+      console.error(e);
+      alert(e?.error || "No se pudieron cargar las categorías");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { loadTree(); }, []);
+  useEffect(() => { loadCategorias(); }, []);
 
-  // ──────────────── Creaciones ────────────────
-  async function onAddCategoria() {
-    const nombre = prompt("Nombre de la categoría:");
-    if (!nombre) return;
+  // Crear categoría
+  async function onCrearCategoria(e) {
+    e.preventDefault();
+    if (!catNombre.trim()) {
+      alert("Introduce un nombre de categoría");
+      return;
+    }
     try {
-      await apiPost("/admin/catalogo/categorias", { nombre });
-      await loadTree();
+      await apiPost("/admin/catalogo/categorias", {
+        nombre: catNombre.trim(),
+        descripcion: catDesc.trim() || ""
+      });
+      setCatNombre("");
+      setCatDesc("");
+      await loadCategorias(); // ← refrescamos lista tras crear
     } catch (e) {
+      console.error(e);
       alert(e?.error || "No se pudo crear la categoría");
     }
   }
 
-  async function onAddSubcategoria() {
-    if (!selectedCat) {
-      alert("Selecciona primero una categoría.");
-      return;
-    }
-    const nombre = prompt(`Nueva subcategoría para "${selectedCat.nombre}":`);
-    if (!nombre) return;
-    try {
-      await apiPost("/admin/catalogo/subcategorias", {
-        nombre,
-        categoria_id: selectedCat.id,
-      });
-      await loadTree();
-    } catch (e) {
-      alert(e?.error || "No se pudo crear la subcategoría");
-    }
-  }
-
-  async function onAddProducto() {
-    if (!selectedSub) {
-      alert("Selecciona primero una subcategoría.");
-      return;
-    }
-    const nombre = prompt(`Nombre del producto para "${selectedSub.nombre}":`);
-    if (!nombre) return;
-
-    // PricePad simple (de momento prompt); más adelante lo sustituimos por el teclado fijo
-    const precioStr = prompt("Precio (ej. 2.20):");
-    if (!precioStr) return;
-
-    // Normalizamos decimal con punto
-    const precio = Number(String(precioStr).replace(",", "."));
-    if (Number.isNaN(precio) || precio < 0) {
-      alert("Precio inválido");
-      return;
-    }
-
-    try {
-      await apiPost("/admin/catalogo/productos", {
-        nombre,
-        precio,
-        subcategoria_id: selectedSub.id,
-      });
-      await loadTree();
-    } catch (e) {
-      alert(e?.error || "No se pudo crear el producto");
-    }
-  }
-
-  // ──────────────── Render helpers ────────────────
-  function Row({ children, onClick, active, level = 0 }) {
-    return (
-      <div
-        onClick={onClick}
-        style={{
-          padding: "6px 10px",
-          margin: "4px 0",
-          borderRadius: 6,
-          cursor: onClick ? "pointer" : "default",
-          background: active ? "#eef5ff" : "transparent",
-          border: active ? "1px solid #9cc1ff" : "1px solid transparent",
-          paddingLeft: 10 + level * 18,
-        }}
-      >
-        {children}
-      </div>
-    );
-  }
-
   return (
-    <div style={{ padding: 24, fontFamily: "sans-serif", maxWidth: 860, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-        <button
-          onClick={() => nav("/mesas")}
-          style={{ padding: "8px 12px", border: "1px solid #333", borderRadius: 6, background: "#eee" }}
-        >
-          ← Mesas
-        </button>
-
+    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <button onClick={() => nav("/mesas")}>← Mesas</button>
         <h1 style={{ margin: 0 }}>Catálogo (Admin)</h1>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <button onClick={onAddCategoria}>+ Categoría</button>
-        <button onClick={onAddSubcategoria} disabled={!selectedCat}>+ Subcategoría</button>
-        <button onClick={onAddProducto} disabled={!selectedSub}>+ Producto</button>
-      </div>
+      <section style={{ marginBottom: 24 }}>
+        <h2 style={{ marginBottom: 8 }}>Categorías</h2>
 
-      {loading && <div style={{ margin: "8px 0" }}>Cargando catálogo…</div>}
-
-      {/* Árbol simple */}
-      <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-        {tree.length === 0 && <div style={{ color: "#666" }}>No hay categorías todavía.</div>}
-
-        {tree.map(cat => (
-          <div key={`cat-${cat.id}`}>
-            <Row
-              level={0}
-              onClick={() => {
-                setSelectedCat(cat);
-                setSelectedSub(null);
-              }}
-              active={selectedCat?.id === cat.id}
-            >
-              <strong>📁 {cat.nombre}</strong>
-            </Row>
-
-            {(cat.subcategorias || []).map(sub => (
-              <div key={`sub-${sub.id}`}>
-                <Row
-                  level={1}
-                  onClick={() => {
-                    setSelectedCat(cat);
-                    setSelectedSub(sub);
-                  }}
-                  active={selectedSub?.id === sub.id}
-                >
-                  <span>📂 {sub.nombre}</span>
-                </Row>
-
-                {(sub.productos || []).map(p => (
-                  <Row key={`prod-${p.id}`} level={2}>
-                    <span>🧾 {p.nombre}</span>
-                    <span style={{ marginLeft: 8, color: "#444" }}>
-                      — {Number(p.precio).toFixed(2)} €
-                    </span>
-                  </Row>
-                ))}
-              </div>
-            ))}
+        <form onSubmit={onCrearCategoria} style={{ display: "grid", gap: 8, maxWidth: 420, marginBottom: 16 }}>
+          <input
+            placeholder="Nombre de la categoría"
+            value={catNombre}
+            onChange={(e) => setCatNombre(e.target.value)}
+          />
+          <input
+            placeholder="Descripción (opcional)"
+            value={catDesc}
+            onChange={(e) => setCatDesc(e.target.value)}
+          />
+          <div>
+            <button type="submit" disabled={loading}>
+              {loading ? "Guardando..." : "Añadir categoría"}
+            </button>
           </div>
-        ))}
-      </div>
+        </form>
+
+        {/* listado simple para verificar persistencia */}
+        <div style={{ border: "1px solid #e5e5e5", borderRadius: 8, padding: 12 }}>
+          {loading && categorias.length === 0 ? (
+            <div>Cargando…</div>
+          ) : categorias.length === 0 ? (
+            <div style={{ color: "#666" }}>No hay categorías todavía.</div>
+          ) : (
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {categorias.map((c) => (
+                <li key={c.id} style={{ margin: "6px 0" }}>
+                  <strong>{c.nombre}</strong>
+                  {c.descripcion ? <span> — {c.descripcion}</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
+
+      {/* Placeholders para siguientes pasos: subcategorías y productos */}
+      <section style={{ marginBottom: 24 }}>
+        <h2 style={{ marginBottom: 8 }}>Subcategorías</h2>
+        <div style={{ color: "#666" }}>
+          Próximo paso: seleccionar categoría y gestionar sus subcategorías aquí.
+        </div>
+      </section>
+
+      <section>
+        <h2 style={{ marginBottom: 8 }}>Productos</h2>
+        <div style={{ color: "#666" }}>
+          Próximo paso: productos por subcategoría + PricePad (solo admin).
+        </div>
+      </section>
     </div>
   );
 }
