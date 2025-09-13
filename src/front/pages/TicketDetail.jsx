@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiGet, apiPost, apiPatch } from "../../api/client";
 
+// util dinero
 function fmtMoney(n) {
   const x = Number(n || 0);
   return x.toFixed(2);
@@ -12,43 +13,54 @@ export default function TicketDetail() {
   const { id } = useParams();
   const nav = useNavigate();
 
+  // data principal
   const [loading, setLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
   const [lineas, setLineas] = useState([]);
-  const [categorias, setCategorias] = useState([]);
-  const [subcats, setSubcats] = useState([]);
-  const [productos, setProductos] = useState([]);
 
+  // catálogo POS
+  const [categorias, setCategorias] = useState([]);
   const [catSel, setCatSel] = useState(null);
+
+  const [subcats, setSubcats] = useState([]);
   const [subcatSel, setSubcatSel] = useState(null);
 
-  // Numpad / cantidad para el próximo producto
+  const [productos, setProductos] = useState([]);
+
+  // numpad cantidad
   const [cantidad, setCantidad] = useState(1);
 
-  const total = useMemo(() => {
-    return lineas.reduce((acc, l) => acc + Number(l.subtotal || 0), 0);
-  }, [lineas]);
+  // total calculado en cliente (las líneas vienen con subtotal)
+  const total = useMemo(
+    () => lineas.reduce((acc, l) => acc + Number(l.subtotal || 0), 0),
+    [lineas]
+  );
 
+  // ─────────────────────────────────────────
+  // Carga inicial
+  // ─────────────────────────────────────────
   async function loadTicket() {
     setLoading(true);
     try {
+      // 1) Cabecera ticket
       const t = await apiGet(`/tpv/tickets/${id}`);
       setTicket(t);
 
+      // 2) Líneas
       const ls = await apiGet(`/tpv/tickets/${id}/lineas`);
-      setLineas(ls || []);
+      setLineas(ls);
 
-      // CATALOGO TPV (categorías + subcategorías + productos)
+      // 3) Catálogo completo para el POS
       const cat = await apiGet(`/tpv/catalogo`);
-      const cats = cat?.categorias || [];
+      const cats = Array.isArray(cat?.categorias) ? cat.categorias : [];
       setCategorias(cats);
 
-      // Inicializa selección (permite productos directos sin subcategoría)
-      const primera = cats[0] || null;
-      if (primera) {
-        setCatSel(primera.id);
-        setSubcats(primera.subcategorias || []);
-        setProductos(primera.productos || []); // <— productos directos de categoría
+      // Selección por defecto: primera categoría (si existe)
+      if (cats.length > 0) {
+        const c0 = cats[0];
+        setCatSel(c0.id);
+        setSubcats(c0.subcategorias || []);
+        setProductos((c0.subcategorias?.length ? [] : c0.productos) || []);
         setSubcatSel(null);
       } else {
         setCatSel(null);
@@ -69,7 +81,7 @@ export default function TicketDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Cuando cambia la categoría seleccionada, refrescamos subcats/productos
+  // Cuando cambia categoría, refrescar subcats y productos
   useEffect(() => {
     if (!catSel) {
       setSubcats([]);
@@ -77,43 +89,38 @@ export default function TicketDetail() {
       setSubcatSel(null);
       return;
     }
-    const c = categorias.find((c) => c.id === catSel);
+    const c = categorias.find((x) => x.id === catSel);
     if (!c) return;
-    setSubcats(c.subcategorias || []);
-    setProductos(c.productos || []); // <— productos directos de categoría
+
+    const scs = c.subcategorias || [];
+    setSubcats(scs);
+
+    // Si no hay subcats, mostrar productos directos de la categoría
+    setProductos(scs.length > 0 ? [] : c.productos || []);
     setSubcatSel(null);
   }, [catSel, categorias]);
 
-  // Cuando cambia la subcategoría, refrescamos productos
+  // Cuando cambia subcat, mostrar sus productos
   useEffect(() => {
     if (!subcatSel) return;
-    const c = categorias.find((c) => c.id === catSel);
+    const c = categorias.find((x) => x.id === catSel);
     if (!c) return;
     const sc = (c.subcategorias || []).find((s) => s.id === subcatSel);
-    if (!sc) return;
-    setProductos(sc.productos || []);
+    setProductos(sc?.productos || []);
   }, [subcatSel, categorias, catSel]);
 
-  // ─────────────────────────────
-  // Actions
-  // ─────────────────────────────
-
+  // ─────────────────────────────────────────
+  // Acciones
+  // ─────────────────────────────────────────
   async function handleAddProduct(productId) {
     try {
-      const resp = await apiPost(`/tpv/tickets/${id}/lineas`, {
+      const nueva = await apiPost(`/tpv/tickets/${id}/lineas`, {
         producto_id: productId,
         cantidad: Math.max(1, Number(cantidad || 1)),
       });
-
-      // Backend NUEVO devuelve la LÍNEA creada
-      if (resp && resp.id && resp.ticket_id) {
-        setLineas((prev) => [...prev, resp]);
-      }
-      // (Compat) si por algún motivo devuelve el ticket completo con lineas
-      else if (resp && resp.lineas) {
-        setLineas(resp.lineas || []);
-      }
-
+      // el endpoint devuelve el ticket completo; actualizamos líneas y total
+      setLineas(nueva.lineas || []);
+      setTicket((prev) => ({ ...(prev || {}), total: nueva.total }));
       setCantidad(1);
     } catch (e) {
       console.error(e);
@@ -123,10 +130,11 @@ export default function TicketDetail() {
 
   async function handleDelLinea(lineaId) {
     try {
-      await apiPatch(`/tpv/tickets/${id}/lineas/${lineaId}`, {
+      const t = await apiPatch(`/tpv/tickets/${id}/lineas/${lineaId}`, {
         accion: "ELIMINAR",
       });
-      setLineas((prev) => prev.filter((l) => l.id !== lineaId));
+      setLineas(t.lineas || []);
+      setTicket((prev) => ({ ...(prev || {}), total: t.total }));
     } catch (e) {
       console.error(e);
       alert(e?.error || "No se pudo eliminar la línea");
@@ -148,7 +156,7 @@ export default function TicketDetail() {
     nav("/mesas", { replace: true, state: { refresh: true } });
   }
 
-  // Numpad handlers
+  // numpad
   function pressNum(n) {
     const prev = String(cantidad || "");
     const next = Number((prev === "0" ? String(n) : prev + String(n)) || "0");
@@ -163,19 +171,41 @@ export default function TicketDetail() {
     setCantidad(Number(trimmed));
   }
 
+  // ─────────────────────────────────────────
+  // UI
+  // ─────────────────────────────────────────
   return (
     <div style={{ padding: 16, fontFamily: "sans-serif" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 12,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button onClick={handleVolver}>← Mesas</button>
           <h2 style={{ margin: 0 }}>
-            Ticket #{id} {ticket?.mesa ? `· Mesa ${ticket.mesa}` : ""}
+            Ticket #{id}
+            {ticket?.mesa ? ` · Mesa ${ticket.mesa}` : ""}
           </h2>
         </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: 600 }}>Total: {fmtMoney(total)} €</div>
-          <button onClick={handleCerrarTicket} style={{ background: "#222", color: "white", padding: "8px 12px", borderRadius: 6 }}>
+          <div style={{ fontSize: 18, fontWeight: 600 }}>
+            Total: {fmtMoney(ticket?.total ?? total)} €
+          </div>
+          <button
+            onClick={handleCerrarTicket}
+            style={{
+              background: "#222",
+              color: "white",
+              padding: "8px 12px",
+              borderRadius: 6,
+            }}
+          >
             Cerrar ticket
           </button>
         </div>
@@ -183,9 +213,15 @@ export default function TicketDetail() {
 
       {loading && <div style={{ marginBottom: 8 }}>Cargando…</div>}
 
-      {/* 3 columnas: numpad / categorías / líneas */}
-      <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 380px", gap: 12 }}>
-        {/* Columna 1: Numpad + cantidad */}
+      {/* 3 columnas */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "220px 1fr 380px",
+          gap: 12,
+        }}
+      >
+        {/* Columna 1: Numpad */}
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
           <div style={{ marginBottom: 8, fontWeight: 600 }}>Cantidad</div>
           <div
@@ -201,7 +237,13 @@ export default function TicketDetail() {
             {cantidad}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 8,
+            }}
+          >
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
               <button key={n} onClick={() => pressNum(n)} style={{ padding: "12px 0" }}>
                 {n}
@@ -253,7 +295,6 @@ export default function TicketDetail() {
               {subcatSel && (
                 <button
                   onClick={() => {
-                    // volver a ver productos de la categoría
                     setSubcatSel(null);
                     const c = categorias.find((x) => x.id === catSel);
                     setProductos(c?.productos || []);
@@ -301,7 +342,7 @@ export default function TicketDetail() {
           </div>
         </div>
 
-        {/* Columna 3: Líneas del ticket */}
+        {/* Columna 3: Líneas */}
         <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Líneas</div>
           <div style={{ maxHeight: 440, overflowY: "auto" }}>
@@ -318,7 +359,7 @@ export default function TicketDetail() {
                   padding: "8px 0",
                 }}
               >
-                <div>{l.nombre || `#${l.producto_id}`}</div>
+                <div>{l.nombre || l.producto_nombre || `#${l.producto_id}`}</div>
                 <div style={{ textAlign: "right" }}>x{l.cantidad}</div>
                 <div style={{ textAlign: "right" }}>{fmtMoney(l.subtotal)} €</div>
                 <button
@@ -332,9 +373,16 @@ export default function TicketDetail() {
             ))}
           </div>
 
-          <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", fontWeight: 600 }}>
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              justifyContent: "space-between",
+              fontWeight: 600,
+            }}
+          >
             <div>Total</div>
-            <div>{fmtMoney(total)} €</div>
+            <div>{fmtMoney(ticket?.total ?? total)} €</div>
           </div>
         </div>
       </div>
