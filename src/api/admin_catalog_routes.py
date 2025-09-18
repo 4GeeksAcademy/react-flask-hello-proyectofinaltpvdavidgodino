@@ -59,12 +59,19 @@ def crear_categoria():
     nombre = (data.get("nombre") or "").strip()
     if not nombre:
         return jsonify({"error": "Nombre obligatorio"}), 400
+
+    # Evita duplicados case-insensitive
     if Categoria.query.filter(db.func.lower(Categoria.nombre) == nombre.lower()).first():
         return jsonify({"error": "La categoría ya existe"}), 400
-    c = Categoria(nombre=nombre, created_at=datetime.utcnow())
-    db.session.add(c)
-    db.session.commit()
-    return jsonify(_ser_cat(c)), 201
+
+    try:
+        c = Categoria(nombre=nombre, created_at=datetime.utcnow())
+        db.session.add(c)
+        db.session.commit()
+        return jsonify(_ser_cat(c)), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo crear la categoría", "detail": str(e)}), 500
 
 @admin_cat_bp.patch("/categorias/<int:cid>")
 @jwt_required()
@@ -74,14 +81,26 @@ def editar_categoria(cid):
     c = Categoria.query.get(cid)
     if not c:
         return jsonify({"error": "Categoría no encontrada"}), 404
+
     data = _json()
     nombre = (data.get("nombre") or "").strip()
-    if nombre:
-        if Categoria.query.filter(db.func.lower(Categoria.nombre) == nombre.lower(), Categoria.id != cid).first():
-            return jsonify({"error": "Nombre ya en uso"}), 400
+    if not nombre:
+        return jsonify({"error": "Nombre obligatorio"}), 400
+
+    # Nombre único dentro de categorías
+    if Categoria.query.filter(
+        db.func.lower(Categoria.nombre) == nombre.lower(),
+        Categoria.id != cid
+    ).first():
+        return jsonify({"error": "Nombre ya en uso"}), 400
+
+    try:
         c.nombre = nombre
-    db.session.commit()
-    return jsonify(_ser_cat(c)), 200
+        db.session.commit()
+        return jsonify(_ser_cat(c)), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo editar la categoría", "detail": str(e)}), 500
 
 @admin_cat_bp.delete("/categorias/<int:cid>")
 @jwt_required()
@@ -91,11 +110,20 @@ def eliminar_categoria(cid):
     c = Categoria.query.get(cid)
     if not c:
         return jsonify({"error": "Categoría no encontrada"}), 404
-    # cascada manual (si tu modelo no tiene cascade configurado)
-    Subcategoria.query.filter_by(categoria_id=cid).delete()
-    db.session.delete(c)
-    db.session.commit()
-    return jsonify({"ok": True}), 200
+
+    try:
+        # cascada manual (si tu modelo no tiene cascade configurado)
+        # primero borra productos de sus subcategorías
+        subs = Subcategoria.query.filter_by(categoria_id=cid).all()
+        for s in subs:
+            Producto.query.filter_by(subcategoria_id=s.id).delete()
+        Subcategoria.query.filter_by(categoria_id=cid).delete()
+        db.session.delete(c)
+        db.session.commit()
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo eliminar la categoría", "detail": str(e)}), 500
 
 # ─────────────────────────────────────────────────────────
 # Subcategorías
@@ -118,19 +146,33 @@ def crear_subcategoria():
     data = _json()
     categoria_id = data.get("categoria_id", None)
     nombre = (data.get("nombre") or "").strip()
+
     if not categoria_id or not nombre:
         return jsonify({"error": "categoria_id y nombre son obligatorios"}), 400
+
+    try:
+        categoria_id = int(categoria_id)
+    except Exception:
+        return jsonify({"error": "categoria_id inválido"}), 400
+
     if not Categoria.query.get(categoria_id):
         return jsonify({"error": "Categoría inexistente"}), 404
+
+    # Evitar duplicado por categoría
     if Subcategoria.query.filter(
         db.func.lower(Subcategoria.nombre) == nombre.lower(),
         Subcategoria.categoria_id == categoria_id
     ).first():
         return jsonify({"error": "La subcategoría ya existe en esta categoría"}), 400
-    s = Subcategoria(categoria_id=categoria_id, nombre=nombre, created_at=datetime.utcnow())
-    db.session.add(s)
-    db.session.commit()
-    return jsonify(_ser_sub(s)), 201
+
+    try:
+        s = Subcategoria(categoria_id=categoria_id, nombre=nombre, created_at=datetime.utcnow())
+        db.session.add(s)
+        db.session.commit()
+        return jsonify(_ser_sub(s)), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo crear la subcategoría", "detail": str(e)}), 500
 
 @admin_cat_bp.patch("/subcategorias/<int:sid>")
 @jwt_required()
@@ -140,18 +182,27 @@ def editar_subcategoria(sid):
     s = Subcategoria.query.get(sid)
     if not s:
         return jsonify({"error": "Subcategoría no encontrada"}), 404
+
     data = _json()
     nombre = (data.get("nombre") or "").strip()
-    if nombre:
-        if Subcategoria.query.filter(
-            db.func.lower(Subcategoria.nombre) == nombre.lower(),
-            Subcategoria.categoria_id == s.categoria_id,
-            Subcategoria.id != sid
-        ).first():
-            return jsonify({"error": "Nombre ya en uso en esta categoría"}), 400
+    if not nombre:
+        return jsonify({"error": "Nombre obligatorio"}), 400
+
+    # Evitar duplicado dentro de la misma categoría
+    if Subcategoria.query.filter(
+        db.func.lower(Subcategoria.nombre) == nombre.lower(),
+        Subcategoria.categoria_id == s.categoria_id,
+        Subcategoria.id != sid
+    ).first():
+        return jsonify({"error": "Nombre ya en uso en esta categoría"}), 400
+
+    try:
         s.nombre = nombre
-    db.session.commit()
-    return jsonify(_ser_sub(s)), 200
+        db.session.commit()
+        return jsonify(_ser_sub(s)), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo editar la subcategoría", "detail": str(e)}), 500
 
 @admin_cat_bp.delete("/subcategorias/<int:sid>")
 @jwt_required()
@@ -161,10 +212,15 @@ def eliminar_subcategoria(sid):
     s = Subcategoria.query.get(sid)
     if not s:
         return jsonify({"error": "Subcategoría no encontrada"}), 404
-    Producto.query.filter_by(subcategoria_id=sid).delete()
-    db.session.delete(s)
-    db.session.commit()
-    return jsonify({"ok": True}), 200
+
+    try:
+        Producto.query.filter_by(subcategoria_id=sid).delete()
+        db.session.delete(s)
+        db.session.commit()
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo eliminar la subcategoría", "detail": str(e)}), 500
 
 # ─────────────────────────────────────────────────────────
 # Productos
@@ -185,23 +241,52 @@ def crear_producto():
     no = _require_admin()
     if no: return no
     data = _json()
+
     subcategoria_id = data.get("subcategoria_id")
     nombre = (data.get("nombre") or "").strip()
     precio = data.get("precio", None)
-    if not subcategoria_id or not nombre:
+
+    # Validaciones iniciales
+    if subcategoria_id is None or not nombre:
         return jsonify({"error": "subcategoria_id y nombre son obligatorios"}), 400
+
+    try:
+        subcategoria_id = int(subcategoria_id)
+    except Exception:
+        return jsonify({"error": "subcategoria_id inválido"}), 400
+
     if not Subcategoria.query.get(subcategoria_id):
         return jsonify({"error": "Subcategoría inexistente"}), 404
+
     if precio is None:
         return jsonify({"error": "Precio obligatorio"}), 400
     try:
         precio = float(precio)
+        if precio < 0:
+            return jsonify({"error": "El precio debe ser mayor o igual a 0"}), 400
     except Exception:
         return jsonify({"error": "Precio inválido"}), 400
-    p = Producto(subcategoria_id=subcategoria_id, nombre=nombre, precio=precio, created_at=datetime.utcnow())
-    db.session.add(p)
-    db.session.commit()
-    return jsonify(_ser_prod(p)), 201
+
+    # Evitar duplicados de nombre dentro de la misma subcategoría (opcional pero útil)
+    if Producto.query.filter(
+        db.func.lower(Producto.nombre) == nombre.lower(),
+        Producto.subcategoria_id == subcategoria_id
+    ).first():
+        return jsonify({"error": "Ya existe un producto con ese nombre en esta subcategoría"}), 400
+
+    try:
+        p = Producto(
+            subcategoria_id=subcategoria_id,
+            nombre=nombre,
+            precio=precio,
+            created_at=datetime.utcnow()
+        )
+        db.session.add(p)
+        db.session.commit()
+        return jsonify(_ser_prod(p)), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo crear el producto", "detail": str(e)}), 500
 
 @admin_cat_bp.patch("/productos/<int:pid>")
 @jwt_required()
@@ -211,21 +296,40 @@ def editar_producto(pid):
     p = Producto.query.get(pid)
     if not p:
         return jsonify({"error": "Producto no encontrado"}), 404
+
     data = _json()
     nombre = data.get("nombre")
     precio = data.get("precio")
+
+    # Si viene nombre, validarlo y comprobar duplicados dentro de su subcategoría
     if nombre is not None:
-        nombre = nombre.strip()
+        nombre = (nombre or "").strip()
         if not nombre:
             return jsonify({"error": "Nombre inválido"}), 400
+        if Producto.query.filter(
+            db.func.lower(Producto.nombre) == nombre.lower(),
+            Producto.subcategoria_id == p.subcategoria_id,
+            Producto.id != p.id
+        ).first():
+            return jsonify({"error": "Ya existe un producto con ese nombre en esta subcategoría"}), 400
         p.nombre = nombre
+
+    # Si viene precio, validarlo
     if precio is not None:
         try:
-            p.precio = float(precio)
+            precio = float(precio)
+            if precio < 0:
+                return jsonify({"error": "El precio debe ser mayor o igual a 0"}), 400
+            p.precio = precio
         except Exception:
             return jsonify({"error": "Precio inválido"}), 400
-    db.session.commit()
-    return jsonify(_ser_prod(p)), 200
+
+    try:
+        db.session.commit()
+        return jsonify(_ser_prod(p)), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo editar el producto", "detail": str(e)}), 500
 
 @admin_cat_bp.delete("/productos/<int:pid>")
 @jwt_required()
@@ -235,6 +339,10 @@ def eliminar_producto(pid):
     p = Producto.query.get(pid)
     if not p:
         return jsonify({"error": "Producto no encontrado"}), 404
-    db.session.delete(p)
-    db.session.commit()
-    return jsonify({"ok": True}), 200
+    try:
+        db.session.delete(p)
+        db.session.commit()
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "No se pudo eliminar el producto", "detail": str(e)}), 500

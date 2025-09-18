@@ -11,40 +11,40 @@ export default function Mesas() {
 
   const [loading, setLoading] = useState(false);
   const [byMesa, setByMesa] = useState({}); // { [mesa]: { id, estado, total } }
-  const [isAdmin, setIsAdmin] = useState(false);
-  const mesas = useMemo(() => Array.from({ length: NUM_MESAS }, (_, i) => i + 1), []);
+
+  const mesas = useMemo(
+    () => Array.from({ length: NUM_MESAS }, (_, i) => i + 1),
+    []
+  );
 
   async function loadTicketsAbiertos() {
     setLoading(true);
     try {
-      const items = await apiGet(`/tpv/tickets?estado=ABIERTO`);
+      const items = await apiGet("/tpv/tickets?estado=ABIERTO"); // ← espera array
       const map = {};
       for (const t of items || []) {
         const m = String(t.mesa);
-        if (!map[m]) map[m] = { id: t.id, estado: t.estado, total: Number(t.total || 0) };
+        if (!map[m])
+          map[m] = {
+            id: t.id,
+            estado: t.estado,
+            total: Number(t.total || 0),
+          };
       }
       setByMesa(map);
     } catch (e) {
-      console.error(e);
-      alert(e?.message || e?.error || "No se pudieron cargar las mesas");
+      console.error("ERROR /tpv/tickets?estado=ABIERTO ⇒", e);
+      alert(e.message || "No se pudieron cargar las mesas");
     } finally {
       setLoading(false);
     }
   }
 
-  async function loadRole() {
-    try {
-      const me = await apiGet(`/auth/me`);
-      setIsAdmin(me?.role === "ADMIN");
-    } catch {
-      setIsAdmin(false);
-    }
-  }
+  useEffect(() => {
+    loadTicketsAbiertos();
+  }, []);
 
-  // Carga inicial
-  useEffect(() => { loadTicketsAbiertos(); loadRole(); }, []);
-
-  // Si volvemos desde TicketDetail con {state:{refresh:true}} -> recargar y limpiar state
+  // Vuelta desde TicketDetail con refresh
   useEffect(() => {
     if (location.state?.refresh) {
       loadTicketsAbiertos();
@@ -56,41 +56,75 @@ export default function Mesas() {
     const info = byMesa[String(mesaNum)];
     try {
       if (info && info.estado === "ABIERTO") {
+        // existe abierto
         nav(`/tickets/${info.id}`);
-      } else {
-        const created = await apiPost(`/tpv/tickets`, { mesa: mesaNum });
-        nav(`/tickets/${created.id}`);
+        return;
       }
+      // crear
+      const created = await apiPost("/tpv/tickets", { mesa: mesaNum });
+      nav(`/tickets/${created.id}`);
     } catch (e) {
-      console.error(e);
-      alert(e?.message || e?.error || "No se pudo abrir/crear ticket");
+      console.error("ERROR abrir/crear ticket ⇒", e);
+      alert(e.message || "No se pudo abrir/crear ticket");
     }
-  }
-
-  function handleSalir() {
-    localStorage.removeItem("token");
-    nav("/login", { replace: true });
   }
 
   return (
     <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      {/* header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
         <h2 style={{ margin: 0 }}>Mesas</h2>
+
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => nav("/tickets")}>Tickets</button>
-          {isAdmin && (
-            <button onClick={() => nav("/admin/catalog")}>
-              Catálogo
-            </button>
-          )}
-          <button onClick={handleSalir}>Salir</button>
+          <button
+            onClick={() => {
+              localStorage.removeItem("token");
+              nav("/login", { replace: true });
+            }}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #333",
+              borderRadius: 6,
+              background: "#f2f2f2",
+            }}
+          >
+            Salir
+          </button>
+
+          <button
+            onClick={() => nav("/admin/catalog")}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #333",
+              borderRadius: 6,
+              background: "#eee",
+            }}
+          >
+            Catálogo
+          </button>
+
+          <button
+            onClick={() => nav("/tickets")}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid #333",
+              borderRadius: 6,
+              background: "#eee",
+            }}
+          >
+            Tickets
+          </button>
         </div>
       </div>
 
       {loading && <div style={{ marginBottom: 8 }}>Cargando…</div>}
 
-      {/* grid 3 x 10 como antes, pero responsivo */}
       <div
         style={{
           display: "grid",

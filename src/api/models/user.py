@@ -1,26 +1,18 @@
-from . import db
-from werkzeug.security import generate_password_hash, check_password_hash
-
-class UserRole(db.Model):
-    __tablename__ = 'user_roles'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    nombre = db.Column(db.String(50), unique=True, nullable=False)
-
-    users = db.relationship('User', backref='role', lazy=True)
-
+# src/api/models/user.py
+from .db import db
+from datetime import datetime
 
 class User(db.Model):
-    __tablename__ = 'users'
-    
+    __tablename__ = "user"
+
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)
-    nombre = db.Column(db.String(50), nullable=False)
-    role_id = db.Column(db.Integer, db.ForeignKey('user_roles.id'), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    password = db.Column(db.String(255), nullable=False)  # almacena hash
+    nombre = db.Column(db.String(120), nullable=True)
 
-    def set_password(self, password):
-        self.password = generate_password_hash(password)
+    role_id = db.Column(db.Integer, db.ForeignKey("user_role.id"), nullable=True)
 
-    def check_password(self, password):
-        return check_password_hash(self.password, password)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<User {self.email}>"

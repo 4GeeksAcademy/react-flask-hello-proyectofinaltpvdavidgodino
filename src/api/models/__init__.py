@@ -1,29 +1,17 @@
-# src/api/models/__init__.py
-from flask_sqlalchemy import SQLAlchemy
+from .db import db
 
-db = SQLAlchemy()
+from .categoria import Categoria
+from .subcategoria import Subcategoria
+from .producto import Producto
+from .ticket import Ticket
+from .linea_ticket import LineaTicket
 
-# Importamos todos los modelos existentes
-from .user import User, UserRole
-from .table import Table
-from .product import Product
-from .order import Order
-from .order_item import OrderItem
-from .tpv import Ticket, LineaTicket, EstadoTicket
-from .catalog import Categoria, Subcategoria, Producto  
+from .user_role import UserRole
+from .user import User
 
 __all__ = [
     "db",
-    "User",
-    "UserRole",
-    "Table",
-    "Product",
-    "Order",
-    "OrderItem",
-    "Ticket",
-    "LineaTicket",
-    "EstadoTicket",
-    "Categoria",
-    "Subcategoria",
-    "Producto",
+    "Categoria", "Subcategoria", "Producto",
+    "Ticket", "LineaTicket",
+    "UserRole", "User",
 ]

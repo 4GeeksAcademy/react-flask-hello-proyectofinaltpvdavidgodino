@@ -10,6 +10,7 @@ from api.routes import api
 from api.admin import setup_admin
 from api.commands import setup_commands
 from api.admin_catalog_routes import admin_cat_bp
+from api.tpv_routes import tpv_bp
 
 ENV = "development" if os.getenv("FLASK_DEBUG") == "1" else "production"
 static_file_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../dist")
@@ -17,7 +18,7 @@ static_file_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 
-# CORS: permite al front (otro subdominio/puerto) llamar a /api/*
+# CORS para /api/*
 CORS(app, resources={
     r"/api/*": {
         "origins": "*",
@@ -49,6 +50,7 @@ setup_commands(app)
 # Blueprints
 app.register_blueprint(api, url_prefix="/api")
 app.register_blueprint(admin_cat_bp, url_prefix="/api/admin/catalogo")
+app.register_blueprint(tpv_bp, url_prefix="/api/tpv")   # <-- Registra aquí, no arriba
 
 print("🔍 Rutas registradas en app:")
 print(app.url_map)
